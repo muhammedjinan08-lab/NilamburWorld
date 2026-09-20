@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NilamburWorld — Open World Exploration Game</title>
+  <meta name="description" content="Explore Nilambur, Kerala in an open-world 3D game featuring Teak Forests, Canoly Hanging Bridge, Chaliyar River, Teak Museum, and Adyanpara Waterfalls.">
+  <link rel="stylesheet" href="styles.css">
+  <!-- Three.js Library (local copy) -->
+  <script src="three.min.js"></script>
+  <script src="Sky.js"></script>
+  <script src="Water.js"></script>
+</head>
+<body>
+
+  <!-- 3D Canvas Container -->
+  <div id="canvas-container"></div>
+
+  <!-- Top Navigation / Header -->
+  <header id="hud-header" class="glass-panel">
+    <div class="brand-title">
+      <div class="brand-icon">🌴</div>
+      <div class="brand-text">
+        <h1>NILAMBUR WORLD</h1>
+        <p>Teak Valley, Malappuram • Open World 3D</p>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn-icon" id="btn-audio-toggle">
+        <span id="audio-icon">🔊</span> Audio Soundscape
+      </button>
+      <button class="btn-icon" id="btn-godot-inspector">
+        <span>🎮</span> Godot GDScript Inspector
+      </button>
+      <button class="btn-icon" id="btn-camera-mode">
+        <span id="camera-icon">🎥</span> Orbit Camera
+      </button>
+    </div>
+  </header>
+
+  <!-- Location Discovered Popup Notification -->
+  <div id="location-popup" class="glass-panel">
+    <p>📍 DISCOVERED LANDMARK</p>
+    <h3 id="popup-title">Conolly's Plot</h3>
+    <p id="popup-desc">World's oldest teak plantation established in 1840s.</p>
+  </div>
+
+  <!-- Left Sidebar: Quests & Fast Travel -->
+  <aside id="left-sidebar">
+    <!-- Quest Log Widget -->
+    <div class="widget-box glass-panel">
+      <div class="widget-header">
+        <h2>📜 Quests & Exploration</h2>
+        <span id="quest-score" style="font-size: 12px; color: var(--accent-gold); font-weight:700;">Score: 0</span>
+      </div>
+      <div class="quest-list" id="quest-container">
+        <!-- Dynamic quest items rendered by JavaScript -->
+      </div>
+    </div>
+
+    <!-- Teleport Locations -->
+    <div class="widget-box glass-panel">
+      <div class="widget-header">
+        <h2>🗺️ Fast Travel Locations</h2>
+      </div>
+      <div class="location-grid">
+        <button class="btn-teleport" data-location="conolly">🌳 Conolly Plot</button>
+        <button class="btn-teleport" data-location="bridge">🌉 Canoly Bridge</button>
+        <button class="btn-teleport" data-location="museum">🏛️ Teak Museum</button>
+        <button class="btn-teleport" data-location="waterfall">🌊 Adyanpara Falls</button>
+        <button class="btn-teleport" data-location="palace">👑 Kovilakam Palace</button>
+        <button class="btn-teleport" data-location="railway">🚂 Nilambur Station</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Right Sidebar: Minimap & Weather Controls -->
+  <aside id="right-sidebar">
+    <!-- 2D Minimap -->
+    <div class="widget-box glass-panel" style="padding: 12px;">
+      <div class="widget-header" style="margin-bottom: 8px;">
+        <h2>📍 GPS Minimap</h2>
+        <span style="font-size: 11px; color: var(--text-muted);" id="coords-text">X: 0 | Z: 0</span>
+      </div>
+      <div id="minimap-container">
+        <canvas id="minimap-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Weather & Atmosphere -->
+    <div class="widget-box glass-panel">
+      <div class="widget-header">
+        <h2>🌤️ Weather & Time</h2>
+      </div>
+      <div class="slider-group">
+        <div class="slider-label">
+          <span>Time of Day</span>
+          <span id="time-display">12:00 PM</span>
+        </div>
+        <input type="range" id="time-range" min="0" max="24" step="0.1" value="12" class="custom-range">
+      </div>
+      <div class="weather-buttons">
+        <button class="btn-weather active" data-weather="sunny">☀️ Sunny</button>
+        <button class="btn-weather" data-weather="rain">🌧️ Monsoon</button>
+        <button class="btn-weather" data-weather="sunset">🌅 Sunset</button>
+        <button class="btn-weather" data-weather="night">🌙 Night</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Bottom Key Legend -->
+  <footer id="bottom-legend" class="glass-panel">
+    <div class="legend-item"><span class="key-badge">W A S D</span> Move Avatar</div>
+    <div class="legend-item"><span class="key-badge">SHIFT</span> Sprint</div>
+    <div class="legend-item"><span class="key-badge">SPACE</span> Jump</div>
+    <div class="legend-item"><span class="key-badge">MOUSE</span> Look Around / Drag</div>
+    <div class="legend-item"><span class="key-badge">E</span> Interact</div>
+  </footer>
+
+  <!-- Chat Box Widget -->
+  <div id="chat-box" class="glass-panel">
+    <div class="widget-header" style="margin-bottom: 4px; padding-bottom: 4px;">
+      <h2>💬 Explorer Lobby Chat</h2>
+    </div>
+    <div class="chat-messages" id="chat-messages">
+      <div class="chat-msg"><span class="chat-sender">System:</span> Welcome to Nilambur World Explorer Lobby!</div>
+      <div class="chat-msg"><span class="chat-sender">Kannan:</span> Has anyone reached Adyanpara Waterfall yet?</div>
+    </div>
+    <form id="chat-form" class="chat-input-row">
+      <input type="text" id="chat-input" class="chat-input" placeholder="Say something..." autocomplete="off">
+    </form>
+  </div>
+
+  <!-- Modal: Godot Script & Scene Inspector -->
+  <div class="modal-overlay" id="godot-modal">
+    <div class="modal-box glass-panel">
+      <div class="modal-header">
+        <h2>🎮 Godot 4.3 Engine Project Code</h2>
+        <button class="btn-close" id="btn-close-modal">&times;</button>
+      </div>
+      <div class="tab-bar">
+        <button class="tab-btn active" data-file="GameManager.gd">GameManager.gd</button>
+        <button class="tab-btn" data-file="PlayerController.gd">PlayerController.gd</button>
+        <button class="tab-btn" data-file="QuestManager.gd">QuestManager.gd</button>
+        <button class="tab-btn" data-file="MultiplayerManager.gd">MultiplayerManager.gd</button>
+        <button class="tab-btn" data-file="project.godot">project.godot</button>
+      </div>
+      <div class="code-viewer" id="code-viewer-content">Loading GDScript content...</div>
+    </div>
+  </div>
+
+  <!-- Main JavaScript Engine -->
+  <script src="proc.js"></script>
+  <script src="world.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
