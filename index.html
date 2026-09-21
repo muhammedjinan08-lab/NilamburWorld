@@ -48,7 +48,7 @@
   <!-- Left Sidebar: Quests & Fast Travel -->
   <aside id="left-sidebar">
     <!-- Quest Log Widget -->
-    <div class="widget-box glass-panel">
+    <div class="widget-box glass-panel collapsible" data-key="quests">
       <div class="widget-header">
         <h2>📜 Quests & Exploration</h2>
         <span id="quest-score" style="font-size: 12px; color: var(--accent-gold); font-weight:700;">Score: 0</span>
@@ -59,7 +59,7 @@
     </div>
 
     <!-- Teleport Locations -->
-    <div class="widget-box glass-panel">
+    <div class="widget-box glass-panel collapsible" data-key="travel">
       <div class="widget-header">
         <h2>🗺️ Fast Travel Locations</h2>
       </div>
@@ -70,6 +70,10 @@
         <button class="btn-teleport" data-location="waterfall">🌊 Adyanpara Falls</button>
         <button class="btn-teleport" data-location="palace">👑 Kovilakam Palace</button>
         <button class="btn-teleport" data-location="railway">🚂 Nilambur Station</button>
+        <button class="btn-teleport" data-location="town">🏘️ Town Bazaar</button>
+        <button class="btn-teleport" data-location="busstation">🚌 Bus Station</button>
+        <button class="btn-teleport" data-location="market">🐟 Fish Market</button>
+        <button class="btn-teleport" data-location="temple">🛕 Temple</button>
       </div>
     </div>
   </aside>
@@ -77,7 +81,7 @@
   <!-- Right Sidebar: Minimap & Weather Controls -->
   <aside id="right-sidebar">
     <!-- 2D Minimap -->
-    <div class="widget-box glass-panel" style="padding: 12px;">
+    <div class="widget-box glass-panel collapsible" data-key="minimap" style="padding: 12px;">
       <div class="widget-header" style="margin-bottom: 8px;">
         <h2>📍 GPS Minimap</h2>
         <span style="font-size: 11px; color: var(--text-muted);" id="coords-text">X: 0 | Z: 0</span>
@@ -88,7 +92,7 @@
     </div>
 
     <!-- Weather & Atmosphere -->
-    <div class="widget-box glass-panel">
+    <div class="widget-box glass-panel collapsible" data-key="weather">
       <div class="widget-header">
         <h2>🌤️ Weather & Time</h2>
       </div>
@@ -106,6 +110,23 @@
         <button class="btn-weather" data-weather="night">🌙 Night</button>
       </div>
     </div>
+
+    <!-- Friends -->
+    <div class="widget-box glass-panel collapsible" data-key="friends">
+      <div class="widget-header">
+        <h2>👥 Friends</h2>
+        <span id="net-me" class="net-me"></span>
+      </div>
+      <form id="friend-form" class="friend-add">
+        <input type="text" id="friend-input" class="chat-input" placeholder="Friend's explorer name" maxlength="16" autocomplete="off">
+        <button type="submit" class="btn-teleport">Add</button>
+      </form>
+      <div id="friend-requests"></div>
+      <div class="friend-title">Friends</div>
+      <div id="friend-list" class="friend-list"><div class="friend-empty">No friends yet.</div></div>
+      <div class="friend-title">Online now</div>
+      <div id="online-list" class="friend-list"><div class="friend-empty">Nobody else is online.</div></div>
+    </div>
   </aside>
 
   <!-- Bottom Key Legend -->
@@ -118,16 +139,32 @@
   </footer>
 
   <!-- Chat Box Widget -->
-  <div id="chat-box" class="glass-panel">
+  <div id="chat-box" class="glass-panel collapsible" data-key="chat">
     <div class="widget-header" style="margin-bottom: 4px; padding-bottom: 4px;">
-      <h2>💬 Explorer Lobby Chat</h2>
+      <h2>💬 Chat</h2>
+      <span id="net-status" class="net-status" title="Connection status">offline</span>
     </div>
-    <div class="chat-messages" id="chat-messages">
-      <div class="chat-msg"><span class="chat-sender">System:</span> Welcome to Nilambur World Explorer Lobby!</div>
-      <div class="chat-msg"><span class="chat-sender">Kannan:</span> Has anyone reached Adyanpara Waterfall yet?</div>
-    </div>
+    <div id="chat-tabs" class="chat-tabs"></div>
+    <div class="chat-messages" id="chat-messages"></div>
     <form id="chat-form" class="chat-input-row">
-      <input type="text" id="chat-input" class="chat-input" placeholder="Say something..." autocomplete="off">
+      <input type="text" id="chat-input" class="chat-input" placeholder="Say something to everyone..." autocomplete="off" maxlength="240">
+    </form>
+  </div>
+
+  <!-- Toasts (friend requests, notices) -->
+  <div id="toast-area"></div>
+
+  <!-- Choose explorer name -->
+  <div class="modal-overlay" id="name-modal">
+    <form class="modal-box glass-panel name-box" id="name-form">
+      <h2>🌴 Welcome, Explorer!</h2>
+      <p>Pick a name. Friends find you by it, and it's shown above your character.</p>
+      <input type="text" id="name-input" class="chat-input" placeholder="Your explorer name" maxlength="16" autocomplete="off">
+      <div id="name-error" class="name-error"></div>
+      <div class="name-actions">
+        <button type="submit" class="btn-teleport">Play online</button>
+        <button type="button" class="btn-teleport" id="name-offline">Play offline</button>
+      </div>
     </form>
   </div>
 
@@ -152,6 +189,8 @@
   <!-- Main JavaScript Engine -->
   <script src="proc.js"></script>
   <script src="world.js"></script>
+  <script src="town.js"></script>
   <script src="main.js"></script>
+  <script src="multiplayer.js"></script>
 </body>
 </html>

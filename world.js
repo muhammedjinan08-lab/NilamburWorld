@@ -5,7 +5,9 @@
 
 // ---------- World constants ----------
 const RAIL_X = -70, RAIL_H = 2.0, BANK_H = 2.7, WATER_Y = -0.8;
-const WORLD_SIZE = 800;
+const WORLD_SIZE = 2000;
+// Nilambur Town: paved plateau on the far eastern plain, beyond the mountain ring around the valley
+const TOWN = { cx: 740, cz: 0, hw: 54, hd: 135 }, TOWN_H = 2.8;
 const M = {};                 // shared materials
 const ANIM = { fallMats: [], glowMats: [], nightLights: [], swayMats: [] };
 const COLL = { circles: [], boxes: [], grid: new Map() };
@@ -19,7 +21,8 @@ const FOOT = [
   { cx: 80, cz: -58, hw: 22, hd: 17 },       // museum
   { cx: RAIL_X + 8, cz: 70, hw: 13, hd: 24 },// station
   { cx: 0, cz: 0, hw: 42, hd: 8 },           // bridge approaches
-  { cx: -100, cz: -110, hw: 46, hd: 24 }     // waterfall cliff + pool
+  { cx: -100, cz: -110, hw: 46, hd: 24 },    // waterfall cliff + pool
+  { cx: TOWN.cx, cz: TOWN.cz, hw: TOWN.hw, hd: TOWN.hd }    // town
 ];
 
 function isFootprint(x, z, margin) {
@@ -32,16 +35,21 @@ function isFootprint(x, z, margin) {
 
 // ---------- Height field ----------
 function rawHeight(x, z) {
-  const ax = Math.abs(x);
+  const ax = Math.abs(x), R = Math.max(ax, Math.abs(z));
+  // Outer plain (where the town lives) is gentle; a mountain rim closes the map edge
+  const plain = smoothstep(480, 560, R) * (1 - smoothstep(900, 960, R));
   const bed = -2.6 + fbm(z * 0.03, 3.3, 2, 1) * 0.9;
   const t = smoothstep(8, 27, ax);
   let h = lerp(bed, BANK_H, t);
   const hillMask = smoothstep(30, 95, ax);
   const n = fbm(x * 0.011 + 13, z * 0.011 + 7, 5, 2);
-  h += Math.max((n - 0.42) * 34, -1.2) * hillMask;
-  h += (fbm(x * 0.06, z * 0.06, 3, 5) - 0.4) * 2.4 * smoothstep(20, 45, ax);
-  const e = smoothstep(185, 310, Math.max(Math.abs(x), Math.abs(z)));
+  h += Math.max((n - 0.42) * 34, -1.2) * hillMask * (1 - plain * 0.93);
+  h += (fbm(x * 0.06, z * 0.06, 3, 5) - 0.4) * 2.4 * smoothstep(20, 45, ax) * (1 - plain * 0.9);
+  // Mountain ring around the valley (185-430 m), falling back to lowland by 520 m
+  const e = smoothstep(185, 310, R) * (1 - smoothstep(430, 520, R));
   h += e * e * 70 * (0.55 + fbm(x * 0.02, z * 0.02, 3, 9));
+  const rim = smoothstep(930, 1000, R);
+  h += rim * rim * 110 * (0.6 + fbm(x * 0.02, z * 0.02, 3, 9));
   return h;
 }
 
@@ -80,6 +88,11 @@ function heightAt(x, z) {
     const dd = Math.sqrt((x - px) * (x - px) + (z - pz) * (z - pz));
     h -= 1.7 * (1 - smoothstep(4.5, 10.5, dd));
   }
+  // Town plateau
+  {
+    const tdx = Math.max(Math.abs(x - TOWN.cx) - TOWN.hw, 0), tdz = Math.max(Math.abs(z - TOWN.cz) - TOWN.hd, 0);
+    h = lerp(h, TOWN_H, 1 - smoothstep(0, 32, Math.hypot(tdx, tdz)));
+  }
   return h;
 }
 
@@ -103,7 +116,7 @@ function forestMask(x, z) {
   const lm = LANDMARKS.conolly.pos;
   const d = Math.hypot(x - lm.x, z - lm.z);
   f = Math.max(f, 1 - smoothstep(35, 70, d));
-  return f;
+  return f * (1 - smoothstep(400, 480, Math.max(Math.abs(x), Math.abs(z))));
 }
 
 // Deck of the Canoly bridge (x runs across the river)
@@ -255,7 +268,8 @@ function signBoard(lines, opts) {
 
 // ---------- Terrain ----------
 function buildTerrain() {
-  const segs = 240;
+  const segs = 400;
+  TEX.ground.repeat.set(300, 300); TEX.groundN.repeat.set(300, 300);
   const geo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, segs, segs);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
@@ -291,8 +305,9 @@ function buildTerrain() {
     // Steep slopes show rock
     c.lerp(cRock, smoothstep(0.22, 0.5, slope));
     // Distant mountains: dark forested
-    const e = smoothstep(190, 300, Math.max(Math.abs(x), Math.abs(z)));
-    c.lerp(cMount, e * 0.85);
+    const Rr = Math.max(Math.abs(x), Math.abs(z));
+    const e = smoothstep(190, 300, Rr) * (1 - smoothstep(430, 520, Rr)) + smoothstep(930, 1000, Rr);
+    c.lerp(cMount, Math.min(e, 1) * 0.85);
     // Cleared ground around buildings
     if (isFootprint(x, z, 2)) c.lerp(cSoil, 0.6);
     const v = 0.9 + n2 * 0.2;

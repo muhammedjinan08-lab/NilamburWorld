@@ -60,6 +60,34 @@ const LANDMARKS = {
     pos: { x: -70, z: 70 },
     radius: 25,
     questId: "quest_railway"
+  },
+  town: {
+    name: "Nilambur Town Bazaar",
+    desc: "Bustling town centre with textile, gold, bakery and hardware shops, a clock tower and busy traffic.",
+    pos: { x: 740, z: 0 },
+    radius: 42,
+    questId: "quest_town"
+  },
+  busstation: {
+    name: "Nilambur KSRTC Bus Station",
+    desc: "The town's bus depot: long-distance buses to Manjeri, Kozhikode, Ooty and Gudalur.",
+    pos: { x: 777, z: 55 },
+    radius: 24,
+    questId: "quest_bus"
+  },
+  market: {
+    name: "Nilambur Fish & Vegetable Market",
+    desc: "Covered market hall with fresh fish, vegetables and spices, plus the fuel station next door.",
+    pos: { x: 777, z: -62 },
+    radius: 22,
+    questId: "quest_market"
+  },
+  temple: {
+    name: "Sree Nilambur Temple",
+    desc: "Traditional Kerala temple beside the main street, with a lamp pillar and flag mast.",
+    pos: { x: 757, z: -100 },
+    radius: 20,
+    questId: "quest_temple"
   }
 };
 
@@ -70,7 +98,11 @@ const TELEPORT = {
   museum: { dx: 0, dz: 26 },
   waterfall: { dx: 14, dz: 26 },
   palace: { dx: 0, dz: 26 },
-  railway: { dx: 4.7, dz: 6 }
+  railway: { dx: 4.7, dz: 6 },
+  town: { dx: -6, dz: 4 },
+  busstation: { dx: 0, dz: -15 },
+  market: { dx: -18, dz: 0 },
+  temple: { dx: -14, dz: 0 }
 };
 
 // Quests Data
@@ -79,7 +111,11 @@ const QUESTS = [
   { id: "quest_bridge", title: "Cross the Chaliyar", desc: "Walk across Canoly Hanging Suspension Bridge.", score: 150, done: false },
   { id: "quest_museum", title: "Teak Scholar", desc: "Visit Nilambur Teak Museum.", score: 200, done: false },
   { id: "quest_waterfall", title: "Adyanpara Cascade", desc: "Reach Adyanpara Waterfall in the rainforest.", score: 300, done: false },
-  { id: "quest_palace", title: "Royal Heritage", desc: "Explore Nilambur Kovilakam Palace.", score: 200, done: false }
+  { id: "quest_palace", title: "Royal Heritage", desc: "Explore Nilambur Kovilakam Palace.", score: 200, done: false },
+  { id: "quest_town", title: "Town Explorer", desc: "Walk the Nilambur bazaar past the clock tower and shops.", score: 200, done: false },
+  { id: "quest_bus", title: "All Aboard", desc: "Visit the KSRTC bus station.", score: 150, done: false },
+  { id: "quest_market", title: "Market Day", desc: "Browse the fish & vegetable market.", score: 150, done: false },
+  { id: "quest_temple", title: "Temple Visit", desc: "Reach the temple at the end of the main street.", score: 150, done: false }
 ];
 
 // Three.js Core Variables
@@ -212,6 +248,7 @@ function buildWorld() {
   buildNilamburPalace();
   buildAdyanparaWaterfall();
   buildRailwayTrack();
+  buildNilamburTown();
   buildVegetation();
   buildPlayerAvatar();
   buildRainSystem();
@@ -690,6 +727,9 @@ function animate() {
     if (ANIM.train.position.z > 330) ANIM.train.position.z = -420;
   }
 
+  if (ANIM.townUpdate) ANIM.townUpdate(dt, clock.t);
+  if (window.NW && NW.tick) NW.tick(dt);
+
   // Clouds drift
   if (cloudGroup) {
     cloudGroup.children.forEach(s => { s.position.x += dt * (4 + s.position.y * 0.01); if (s.position.x > 1500) s.position.x = -1500; });
@@ -747,8 +787,9 @@ function updatePlayerMovement(dt) {
   }
 
   // Boundary clamp + collisions
-  p.x = clamp(p.x, -280, 280);
-  p.z = clamp(p.z, -280, 280);
+  const lim = WORLD_SIZE / 2 - 45;
+  p.x = clamp(p.x, -lim, lim);
+  p.z = clamp(p.z, -lim, lim);
   resolveCollisions(p, 0.45);
 
   // Vertical: gravity, jump, terrain following
@@ -879,39 +920,56 @@ function updateMinimap() {
   ctx.fillStyle = '#0a1d12';
   ctx.fillRect(0, 0, w, h);
 
-  // Scale map coordinate (-300 to 300 -> 0 to w/h)
-  const mapX = (x) => ((x + 300) / 600) * w;
-  const mapZ = (z) => ((z + 300) / 600) * h;
+  // Player-centred map: 600 m across (same scale on both axes)
+  const psx = state.playerPos.x, psz = state.playerPos.z, sc = w / 600;
+  const mapX = (x) => (x - psx) * sc + w / 2;
+  const mapZ = (z) => (z - psz) * sc + h / 2;
+  const line = (x1, z1, x2, z2) => { ctx.moveTo(mapX(x1), mapZ(z1)); ctx.lineTo(mapX(x2), mapZ(z2)); };
 
   // Draw River
   ctx.strokeStyle = '#00B0FF';
-  ctx.lineWidth = 14;
+  ctx.lineWidth = 14 * sc * 2;
   ctx.beginPath();
-  ctx.moveTo(mapX(0), 0);
-  ctx.lineTo(mapX(0), h);
+  line(0, -320, 0, 320);
   ctx.stroke();
+
+  // Town streets: ring road plus main street, cross road and west lane
+  {
+    const RW = TOWN.cx - 180, RE = TOWN.cx + 180, RZ = 330, lx = TOWN.cx - 35.5;
+    ctx.strokeStyle = 'rgba(190,190,180,0.85)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    line(RW, -RZ, RE, -RZ); line(RE, -RZ, RE, RZ); line(RE, RZ, RW, RZ); line(RW, RZ, RW, -RZ);
+    line(RW, 0, RE, 0); line(TOWN.cx, -RZ, TOWN.cx, RZ); line(lx, -RZ, lx, RZ);
+    ctx.stroke();
+  }
 
   // Railway line
   ctx.strokeStyle = 'rgba(200,200,200,0.7)';
   ctx.lineWidth = 2;
   ctx.setLineDash([4, 3]);
   ctx.beginPath();
-  ctx.moveTo(mapX(RAIL_X), 0);
-  ctx.lineTo(mapX(RAIL_X), h);
+  line(RAIL_X, -260, RAIL_X, 260);
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Draw Landmark Markers
+  // Draw Landmark Markers (those off the map are pinned to its edge)
   for (const key in LANDMARKS) {
     const lm = LANDMARKS[key];
-    const lx = mapX(lm.pos.x);
-    const lz = mapZ(lm.pos.z);
+    const raw = { x: mapX(lm.pos.x), z: mapZ(lm.pos.z) };
+    const off = raw.x < 6 || raw.x > w - 6 || raw.z < 6 || raw.z > h - 6;
+    const lx = Math.min(w - 6, Math.max(6, raw.x)), lz = Math.min(h - 6, Math.max(6, raw.z));
 
+    ctx.globalAlpha = off ? 0.55 : 1;
     ctx.fillStyle = state.discoveredLocations.has(key) ? '#FFB300' : '#81C784';
     ctx.beginPath();
-    ctx.arc(lx, lz, 5, 0, Math.PI * 2);
+    ctx.arc(lx, lz, off ? 3 : 5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = 1;
   }
+
+  if (window.NW && NW.drawMinimap) NW.drawMinimap(ctx, mapX, mapZ);
 
   // Draw Player Position Dot
   const px = mapX(state.playerPos.x);
@@ -1124,26 +1182,6 @@ function setupEventListeners() {
       btn.classList.add('active');
       loadGodotFile(btn.dataset.file);
     });
-  });
-
-  // Chat Form Submit
-  document.getElementById('chat-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const input = document.getElementById('chat-input');
-    const txt = input.value.trim();
-    if (txt) {
-      const container = document.getElementById('chat-messages');
-      const msg = document.createElement('div');
-      msg.className = 'chat-msg';
-      const who = document.createElement('span');
-      who.className = 'chat-sender';
-      who.textContent = 'You:';
-      msg.appendChild(who);
-      msg.appendChild(document.createTextNode(' ' + txt));
-      container.appendChild(msg);
-      container.scrollTop = container.scrollHeight;
-      input.value = '';
-    }
   });
 
   // Initial time display

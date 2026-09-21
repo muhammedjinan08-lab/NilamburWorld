@@ -1,0 +1,13 @@
+{
+  "name": "nilamburworld",
+  "version": "1.0.0",
+  "description": "NilamburWorld - open-world 3D Nilambur with multiplayer chat and friends",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}
