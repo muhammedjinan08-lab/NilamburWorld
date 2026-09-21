@@ -115,16 +115,24 @@
   }
 
   // ------------------------------------------------------------------ socket
-  let ws = null, retry = 0, retryTimer = null, wantOnline = false, creds = null;
+  let ws = null, retry = 0, retryTimer = null, wantOnline = false, creds = null, everConnected = false, attempts = 0;
   function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 
-  function serverUrl() {
+  // Where is the game server? ?server=wss://host/ws overrides; the game's own host is used when it runs
+  // server.js; a static host (GitHub Pages) looks for a published server.json {"url": "wss://host/ws"}.
+  let discovered = '';
+  function serverUrl() { return discovered; }
+  function discoverServer() {
     const q = new URLSearchParams(location.search).get('server');
-    if (q) { LS.set('nw_server', q); }
+    if (q) LS.set('nw_server', q);
     const custom = LS.get('nw_server', '');
-    if (custom) return custom;
-    if (location.protocol === 'file:' || /\.github\.io$/.test(location.hostname)) return '';
-    return (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+    if (custom) return Promise.resolve(custom);
+    if (location.protocol === 'file:') return Promise.resolve('');
+    if (!/\.github\.io$/.test(location.hostname)) return Promise.resolve((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    return fetch('server.json?ts=' + Date.now(), { cache: 'no-store' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => (j && typeof j.url === 'string' && /^wss?:\/\//.test(j.url) ? j.url : ''))
+      .catch(() => '');
   }
 
   function setStatus(txt, cls) { const s = $('net-status'); s.textContent = txt; s.className = 'net-status ' + (cls || ''); }
@@ -132,7 +140,7 @@
   function connect() {
     clearTimeout(retryTimer);
     const url = serverUrl();
-    if (!url) { setStatus('offline (no server)'); addMsg('lobby', '', 'No game server here. Run "node server.js" (see README) or open the game from a server address to play with others.', { sys: true }); return; }
+    if (!url) { setStatus('offline (no server)'); addMsg('lobby', '', 'No game server is published for this site yet, so chat and friends are offline. Run "node server.js" (see README) to play with others.', { sys: true }); return; }
     setStatus('connecting…', 'connecting');
     try { ws = new WebSocket(url); } catch (e) { scheduleRetry(); return; }
     ws.onopen = () => { retry = 0; send({ t: 'login', name: creds.name, token: creds.token }); };
@@ -146,12 +154,20 @@
     };
     ws.onerror = () => {};
   }
-  function scheduleRetry() { retry = Math.min(retry + 1, 6); retryTimer = setTimeout(connect, 1000 * retry); }
+  function scheduleRetry() {
+    attempts++;
+    if (!everConnected && attempts >= 4) {      // never reached it: the server is probably down
+      wantOnline = false; setStatus('offline (server down)');
+      addMsg('lobby', '', 'The game server is not reachable right now. Reload the page later to try again.', { sys: true });
+      return;
+    }
+    retry = Math.min(retry + 1, 6); retryTimer = setTimeout(connect, 1000 * retry);
+  }
 
   function handle(m) {
     switch (m.t) {
       case 'welcome':
-        NW.connected = true; NW.name = m.name; wantOnline = true;
+        NW.connected = true; NW.name = m.name; wantOnline = true; everConnected = true; attempts = 0;
         LS.set('nw_name', m.name);
         setStatus('online', 'online'); $('net-me').textContent = 'You: ' + m.name;
         thread('lobby').msgs = []; if (active === 'lobby') { msgBox.textContent = ''; }
@@ -399,9 +415,13 @@
     });
 
     renderSocial();
-    if (!serverUrl()) { connect(); return; }           // no server here: stay offline, explain in the lobby tab
-    const saved = LS.get('nw_name', '');
-    if (saved && LS.get('nw_token', '')) startOnline(saved); else showNameDialog();
+    setStatus('looking for server…', 'connecting');
+    discoverServer().then(url => {
+      discovered = url;
+      if (!url) { connect(); return; }                 // no server: stay offline, explain in the lobby tab
+      const saved = LS.get('nw_name', '');
+      if (saved && LS.get('nw_token', '')) startOnline(saved); else showNameDialog();
+    });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();

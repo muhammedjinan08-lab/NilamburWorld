@@ -18,7 +18,7 @@ const { WebSocketServer } = require('ws');
 
 const PORT = +process.env.PORT || 8000;
 const ROOT = __dirname;
-const DATA_DIR = path.join(ROOT, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
 const DATA_FILE = path.join(DATA_DIR, 'users.json');
 
 // ---------- Static file server ----------
@@ -105,7 +105,25 @@ function allow(s, cost, refillPerSec, cap) {
 // ---------- WebSocket protocol ----------
 const wss = new WebSocketServer({ server: httpServer, path: '/ws', maxPayload: 4096 });
 
-wss.on('connection', (ws) => {
+// Abuse limits for public hosting (behind a host's proxy the client address arrives in a header)
+const MAX_CONN_PER_IP = 10, MAX_NEW_ACCOUNTS_PER_IP_HOUR = 6, MAX_USERS = 5000;
+const connsByIp = new Map();
+const newAccountsByIp = new Map();
+function clientIp(req) {
+  return String(String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress || '?');
+}
+function accountBudget(ip) {
+  const now = Date.now(), list = (newAccountsByIp.get(ip) || []).filter(t => now - t < 3600000);
+  newAccountsByIp.set(ip, list);
+  return list.length < MAX_NEW_ACCOUNTS_PER_IP_HOUR ? list : null;
+}
+
+wss.on('connection', (ws, req) => {
+  const ip = clientIp(req);
+  const n = (connsByIp.get(ip) || 0) + 1;
+  if (n > MAX_CONN_PER_IP) { ws.close(1013, 'too many connections'); return; }
+  connsByIp.set(ip, n);
+  ws.on('close', () => { const c = (connsByIp.get(ip) || 1) - 1; if (c <= 0) connsByIp.delete(ip); else connsByIp.set(ip, c); });
   let me = null;   // session once logged in
   const fail = (text) => { send(ws, { t: 'error', text: text }); };
 
@@ -125,6 +143,9 @@ wss.on('connection', (ws) => {
         const a = Buffer.from(u.tokenHash), b = Buffer.from(sha(token));
         if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return send(ws, { t: 'error', code: 'name_taken', text: 'That name belongs to another explorer. Pick a different name.' });
       } else {
+        const budget = accountBudget(ip);
+        if (!budget || Object.keys(users).length >= MAX_USERS) return fail('Too many new explorers from your network right now. Try again later.');
+        budget.push(Date.now());
         u = users[key] = { name: name, tokenHash: sha(token), friends: [], incoming: [], outgoing: [] };
         save();
       }

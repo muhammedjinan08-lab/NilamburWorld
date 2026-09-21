@@ -1,0 +1,13 @@
+# One-click hosting on Render (https://render.com): New > Blueprint > pick this repo.
+# The free plan sleeps after ~15 min without visitors (first load is slow) and its disk is
+# not kept between restarts, so friends lists / private chat history reset when it restarts.
+# For persistence add a disk (paid) and set DATA_DIR to its mount path.
+services:
+  - type: web
+    name: nilamburworld
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /
+    autoDeploy: true
