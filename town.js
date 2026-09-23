@@ -8,6 +8,12 @@
 const TM = {};                 // town materials
 const TB = {};                 // static batches: key -> [{geo, matrix, color}]
 const TOWN_ANIM = { movers: [], walkers: [] };
+// Drivable vehicles (cars, motorcycles, buses): { type, g, x, z, yaw, spd, collider, radius, mover, occupied }.
+// x/z are world coordinates throughout (unlike most of this file, which is authored in local coordinates and
+// shifted by +OX at render time) so main.js's driving code can use them directly with groundHeight/resolveCollisions.
+const VEHICLES = [];
+const DRIVABLE_TYPES = { car: 1, bike: 1, bus: 1 };
+const VEH_RADIUS = { car: 1.15, bike: 0.55, bus: 1.75 };
 const TX = 178;                          // town is authored in local coordinates (main street x = TX) ...
 const OX = TOWN.cx - TX;                 // ... and shifted into the world by OX
 const TC = { x: TX, z: 0 };              // main street runs N-S through x = TC.x, cross road E-W through z = 0
@@ -465,10 +471,21 @@ function vehicleParts(type, hex) {
 const VEH_LEN = { car: 4.0, auto: 2.6, bus: 10.4, bike: 1.7, van: 5.0 };
 
 function placeVehicle(type, hex, x, z, yaw, noCollider) {
-  const y = heightAt(x + OX, z) + ROAD_Y;
-  const M4 = new THREE.Matrix4().compose(new THREE.Vector3(x + OX, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)), new THREE.Vector3(1, 1, 1));
+  const wx = x + OX;
+  const y = heightAt(wx, z) + ROAD_Y;
+  if (DRIVABLE_TYPES[type]) {
+    // Cars, motorcycles and buses are individual, drivable objects - not merged into the static batch.
+    const g = movingVehicle(type, hex);
+    g.position.set(wx, y, z);
+    g.rotation.y = yaw;
+    const radius = VEH_RADIUS[type];
+    const collider = noCollider ? null : colCirc(x, z, radius);
+    VEHICLES.push({ type: type, g: g, x: wx, z: z, yaw: yaw, spd: 0, collider: collider, radius: radius, mover: null, occupied: false });
+    return;
+  }
+  const M4 = new THREE.Matrix4().compose(new THREE.Vector3(wx, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)), new THREE.Vector3(1, 1, 1));
   vehicleParts(type, hex).forEach(p => tbPush(p.key, p.geo, new THREE.Matrix4().multiplyMatrices(M4, p.matrix), p.color ? p.color.getHex() : undefined));
-  if (!noCollider && type !== 'bike') {
+  if (!noCollider) {
     const L = (type === 'van' && hex === 0xc8201e ? 6.6 : VEH_LEN[type]) / 2, Wd = type === 'bus' ? 1.3 : 1.0;
     const along = Math.abs(Math.sin(yaw)) > 0.7;
     colBox(x, z, along ? L : Wd, along ? Wd : L);
@@ -823,6 +840,14 @@ function buildTownVehicles(rng) {
   movers.forEach(m => {
     m.g = movingVehicle(m.t, m.c);
     TOWN_ANIM.movers.push(m);
+    if (DRIVABLE_TYPES[m.t]) {
+      // Registered as drivable too; while m.mover is set, updateTown (not the driving code) owns its
+      // position, so x/z/yaw here are only a placeholder until the player actually gets in (enterVehicle
+      // re-reads the live transform at that moment).
+      const lx = m.axis === 'x' ? m.pos : m.fixed, lz = m.axis === 'z' ? m.pos : m.fixed;
+      const yaw = m.axis === 'z' ? (m.dir > 0 ? 0 : Math.PI) : (m.dir > 0 ? Math.PI / 2 : -Math.PI / 2);
+      VEHICLES.push({ type: m.t, g: m.g, x: lx + OX, z: lz, yaw: yaw, spd: 0, collider: null, radius: VEH_RADIUS[m.t], mover: m, occupied: false });
+    }
   });
 }
 

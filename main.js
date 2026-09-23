@@ -14,7 +14,9 @@ const state = {
   discoveredLocations: new Set(),
   playerPos: { x: 30, y: 3, z: 14 },
   playerVelocity: { x: 0, y: 0, z: 0 },
-  isGrounded: true
+  isGrounded: true,
+  driving: null,        // the VEHICLES entry currently being driven, or null
+  ridingTrain: false
 };
 
 // Landmarks Data
@@ -248,6 +250,7 @@ function buildWorld() {
   buildNilamburPalace();
   buildAdyanparaWaterfall();
   buildRailwayTrack();
+  buildMinorStations();
   buildNilamburTown();
   buildVegetation();
   buildPlayerAvatar();
@@ -721,11 +724,8 @@ function animate() {
   }
   if (ANIM.pool) { ANIM.pool.material.normalMap.offset.y = clock.t * 0.02; ANIM.pool.material.normalMap.offset.x = clock.t * 0.013; }
 
-  // Train
-  if (ANIM.train) {
-    ANIM.train.position.z += 15 * dt;
-    if (ANIM.train.position.z > 330) ANIM.train.position.z = -420;
-  }
+  // Train (stops at each of the 6 stations along the way - see updateTrain in world.js)
+  updateTrain(dt);
 
   if (ANIM.townUpdate) ANIM.townUpdate(dt, clock.t);
   if (window.NW && NW.tick) NW.tick(dt);
@@ -755,6 +755,8 @@ function animate() {
 // Player Physics & Movement
 function updatePlayerMovement(dt) {
   if (!playerMesh) return;
+  if (state.driving) { updateVehicleDriving(dt); return; }
+  if (state.ridingTrain) { updateRidingTrain(dt); return; }
   const parent = playerMesh.parent;
   const sprint = keyState['ShiftLeft'] || keyState['ShiftRight'];
   let speed = sprint ? 17 : 8;
@@ -969,6 +971,21 @@ function updateMinimap() {
     ctx.globalAlpha = 1;
   }
 
+  // Draw the 6 train stations and the train itself
+  if (typeof STATIONS !== 'undefined') {
+    STATIONS.forEach((st, i) => {
+      const sx = mapX(RAIL_X), sz = mapZ(st.z);
+      ctx.fillStyle = TRAIN_STATE.state === 'dwell' && TRAIN_STATE.i === i ? '#FFD54F' : '#B0BEC5';
+      ctx.fillRect(sx - 3, sz - 3, 6, 6);
+    });
+    if (ANIM.train) {
+      ctx.fillStyle = '#E53935';
+      ctx.beginPath();
+      ctx.arc(mapX(RAIL_X), mapZ(ANIM.train.position.z), 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   if (window.NW && NW.drawMinimap) NW.drawMinimap(ctx, mapX, mapZ);
 
   // Draw Player Position Dot
@@ -1104,7 +1121,7 @@ function setupEventListeners() {
     if (typing(e)) return;
     keyState[e.code] = true;
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
-    if (e.code === 'KeyE') interactNearest();
+    if (e.code === 'KeyE' && !e.repeat) interactNearest();
   });
   window.addEventListener('keyup', (e) => { keyState[e.code] = false; });
   window.addEventListener('blur', () => { for (const k in keyState) keyState[k] = false; });
@@ -1188,8 +1205,173 @@ function setupEventListeners() {
   document.getElementById('time-display').innerText = formatTime(state.timeOfDay);
 }
 
-// E key: show the info card of the closest landmark
+// ---------------------------------------------------------------------------
+// Driving: cars, motorcycles (bikes) and buses. VEHICLES is built in town.js;
+// each entry is { type, g (THREE.Group), x, z, yaw, spd, collider, radius, mover, occupied }.
+// ---------------------------------------------------------------------------
+const VEH_SPECS = {
+  car: { max: 24, acc: 16, turn: 2.0, camDist: 15 },
+  bike: { max: 28, acc: 20, turn: 2.9, camDist: 11 },
+  bus: { max: 15, acc: 7, turn: 1.0, camDist: 22 }
+};
+const ENTER_RANGE = 3.5;
+
+function nearestFreeVehicle() {
+  if (typeof VEHICLES === 'undefined') return null;
+  let best = null, bd = 1e9;
+  for (let i = 0; i < VEHICLES.length; i++) {
+    const v = VEHICLES[i];
+    if (v.occupied) continue;
+    // Still under script control (traffic loop): its x/z fields are only a stale placeholder, so
+    // check against its live transform instead.
+    const vx = v.mover ? v.g.position.x : v.x, vz = v.mover ? v.g.position.z : v.z;
+    const d = Math.hypot(state.playerPos.x - vx, state.playerPos.z - vz);
+    if (d < bd) { bd = d; best = v; }
+  }
+  return best && bd < best.radius + ENTER_RANGE ? best : null;
+}
+
+function tryEnterVehicle() {
+  const v = nearestFreeVehicle();
+  if (!v) return false;
+  enterVehicle(v);
+  return true;
+}
+
+function enterVehicle(v) {
+  if (v.mover) {
+    // Hand off from the scripted traffic loop to the player, keeping its current speed/heading.
+    v.x = v.g.position.x; v.z = v.g.position.z; v.yaw = v.g.rotation.y;
+    v.spd = v.mover.dir * v.mover.sp;
+    const idx = TOWN_ANIM.movers.indexOf(v.mover);
+    if (idx >= 0) TOWN_ANIM.movers.splice(idx, 1);
+    v.mover = null;
+  } else if (v.collider) {
+    removeCircleCollider(v.collider);
+    v.collider = null;
+  }
+  v.occupied = true;
+  state.driving = v;
+  playerMesh.parent.visible = false;
+  camRig._savedDist = camRig.distTarget;
+  camRig.distTarget = (VEH_SPECS[v.type] || VEH_SPECS.car).camDist;
+  const icon = v.type === 'bus' ? '🚌' : v.type === 'bike' ? '🏍️' : '🚗';
+  triggerLandmarkPopup(icon + ' Driving', 'WASD to steer, SPACE to brake, E to get out.');
+}
+
+function exitVehicle() {
+  const v = state.driving;
+  if (!v) return;
+  v.occupied = false;
+  v.spd = 0;
+  v.collider = addCircleCollider(v.x, v.z, v.radius);
+  const ex = v.x + Math.cos(v.yaw) * (v.radius + 1.1), ez = v.z - Math.sin(v.yaw) * (v.radius + 1.1);
+  const g = groundHeight(ex, ez);
+  playerMesh.parent.visible = true;
+  playerMesh.parent.position.set(ex, g, ez);
+  state.playerPos.x = ex; state.playerPos.y = g; state.playerPos.z = ez;
+  state.playerVelocity.y = 0; state.isGrounded = true;
+  camRig.distTarget = camRig._savedDist || 16;
+  state.driving = null;
+  triggerLandmarkPopup('🚶 On foot', 'You parked the vehicle. Walk up to any vehicle and press E to drive it.');
+}
+
+function updateVehicleDriving(dt) {
+  const v = state.driving;
+  const s = VEH_SPECS[v.type] || VEH_SPECS.car;
+  let inF = 0, inR = 0;
+  if (keyState['KeyW'] || keyState['ArrowUp']) inF += 1;
+  if (keyState['KeyS'] || keyState['ArrowDown']) inF -= 1;
+  if (keyState['KeyD'] || keyState['ArrowRight']) inR += 1;
+  if (keyState['KeyA'] || keyState['ArrowLeft']) inR -= 1;
+
+  if (keyState['Space']) v.spd += (0 - v.spd) * Math.min(1, dt * 6);
+  else if (inF > 0) v.spd = Math.min(s.max, v.spd + s.acc * dt);
+  else if (inF < 0) v.spd = Math.max(-s.max * 0.5, v.spd - s.acc * dt);
+  else v.spd += (0 - v.spd) * Math.min(1, dt * 1.6);
+
+  if (inR !== 0 && Math.abs(v.spd) > 0.15) {
+    const turnDir = v.spd >= 0 ? 1 : -1;
+    const speedFactor = Math.min(1, Math.abs(v.spd) / (s.max * 0.4));
+    v.yaw += inR * s.turn * dt * turnDir * speedFactor;
+  }
+
+  v.x += Math.sin(v.yaw) * v.spd * dt;
+  v.z += Math.cos(v.yaw) * v.spd * dt;
+  const lim = WORLD_SIZE / 2 - 10;
+  v.x = clamp(v.x, -lim, lim); v.z = clamp(v.z, -lim, lim);
+
+  const pos = { x: v.x, z: v.z };
+  resolveCollisions(pos, v.radius);
+  if (Math.abs(pos.x - v.x) > 1e-4 || Math.abs(pos.z - v.z) > 1e-4) v.spd *= 0.55;
+  v.x = pos.x; v.z = pos.z;
+
+  const gy = groundHeight(v.x, v.z);
+  v.g.position.set(v.x, gy + ROAD_Y, v.z);
+  v.g.rotation.y = v.yaw;
+
+  const parent = playerMesh.parent;
+  parent.position.set(v.x, gy + 1.0, v.z);
+  state.playerPos.x = v.x; state.playerPos.y = gy + 1.0; state.playerPos.z = v.z;
+  camRig.idleTime = 0;
+  document.getElementById('coords-text').innerText = `X: ${Math.round(v.x)} | Z: ${Math.round(v.z)}`;
+}
+
+// ---------------------------------------------------------------------------
+// The train: 6 stops (STATIONS, world.js). Board/exit only while it is dwelling at a station.
+// ---------------------------------------------------------------------------
+const TRAIN_BOARD_RANGE = 10;
+
+function tryBoardTrain() {
+  if (!ANIM.train || TRAIN_STATE.state !== 'dwell') return false;
+  const st = STATIONS[TRAIN_STATE.i];
+  const d = Math.hypot(state.playerPos.x - st.board, state.playerPos.z - st.z);
+  if (d > TRAIN_BOARD_RANGE) return false;
+  boardTrain(st);
+  return true;
+}
+
+function boardTrain(st) {
+  state.ridingTrain = true;
+  playerMesh.parent.visible = false;
+  camRig._savedDist = camRig.distTarget;
+  camRig.distTarget = 22;
+  const next = STATIONS[(TRAIN_STATE.i + 1) % STATIONS.length];
+  triggerLandmarkPopup('🚆 Boarded the train', 'Riding towards ' + next.name + '. Press E to get off at any stop.');
+}
+
+function tryExitTrain() {
+  if (TRAIN_STATE.state !== 'dwell') {
+    triggerLandmarkPopup('🚆 Still moving', 'Wait for the train to stop at a station before getting off.');
+    return;
+  }
+  const st = STATIONS[TRAIN_STATE.i];
+  state.ridingTrain = false;
+  playerMesh.parent.visible = true;
+  const ex = st.board, ez = st.z;
+  const g = groundHeight(ex, ez);
+  playerMesh.parent.position.set(ex, g, ez);
+  state.playerPos.x = ex; state.playerPos.y = g; state.playerPos.z = ez;
+  state.playerVelocity.y = 0; state.isGrounded = true;
+  camRig.distTarget = camRig._savedDist || 16;
+  triggerLandmarkPopup('🚉 ' + st.name, 'You got off the train. Press E near the train when it stops here again to ride on.');
+}
+
+function updateRidingTrain(dt) {
+  const wx = RAIL_X + 0.4, wy = RAIL_H + 2.7, wz = ANIM.train ? ANIM.train.position.z : state.playerPos.z;
+  playerMesh.parent.position.set(wx, wy, wz);
+  state.playerPos.x = wx; state.playerPos.y = wy; state.playerPos.z = wz;
+  camRig.idleTime = 0;
+  document.getElementById('coords-text').innerText = `X: ${Math.round(wx)} | Z: ${Math.round(wz)}`;
+}
+
+// E key: drive/exit a vehicle, board/exit the train, or show the info card of the closest landmark
 function interactNearest() {
+  if (state.driving) { exitVehicle(); return; }
+  if (state.ridingTrain) { tryExitTrain(); return; }
+  if (tryBoardTrain()) return;
+  if (tryEnterVehicle()) return;
+
   let best = null, bd = 1e9;
   for (const key in LANDMARKS) {
     const lm = LANDMARKS[key];

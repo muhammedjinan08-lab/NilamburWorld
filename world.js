@@ -139,6 +139,16 @@ function addCircleCollider(x, z, r) {
   let arr = COLL.grid.get(key);
   if (!arr) { arr = []; COLL.grid.set(key, arr); }
   arr.push(c);
+  return c;
+}
+// Undo addCircleCollider - used when a parked vehicle is driven away.
+function removeCircleCollider(c) {
+  if (!c) return;
+  const i = COLL.circles.indexOf(c);
+  if (i >= 0) COLL.circles.splice(i, 1);
+  const key = Math.floor(c.x / 12) + ',' + Math.floor(c.z / 12);
+  const arr = COLL.grid.get(key);
+  if (arr) { const j = arr.indexOf(c); if (j >= 0) arr.splice(j, 1); }
 }
 function addBoxCollider(cx, cz, hw, hd) { COLL.boxes.push({ cx: cx, cz: cz, hw: hw, hd: hd }); }
 
@@ -1238,4 +1248,70 @@ function buildRailwayTrack() {
   scene.add(g);
   addBoxCollider(RAIL_X + bx, SZ, 4.2, 9.7);
   GROUND_EXTRAS.push((x, z) => (Math.abs(x - (RAIL_X + 4.7)) < 2.4 && Math.abs(z - SZ) < 19) ? RAIL_H + PH : null);
+}
+
+// ---------- Train stations (6 stops along the Shoranur-Nilambur line) ----------
+// Sorted north-to-south; the train visits them in this order, in a loop.
+const STATIONS = [
+  { z: -215, name: 'Adyanpara Halt', desc: 'Wayside halt for the waterfall trail.', board: RAIL_X + 3.6 },
+  { z: -135, name: 'Vazhikkadavu', desc: 'Small halt serving the northern teak plantations.', board: RAIL_X + 3.6 },
+  { z: -50, name: 'Chandakunnu', desc: "Forest-edge halt near Conolly's Plot.", board: RAIL_X + 3.6 },
+  { z: 70, name: 'Nilambur Road', desc: 'Terminus station and railway workshop for the Nilambur branch line.', board: RAIL_X + 4.7, major: true },
+  { z: 150, name: 'Edakkara', desc: 'Village halt on the Nilambur branch line.', board: RAIL_X + 3.6 },
+  { z: 225, name: 'Kalikavu Road', desc: 'Southern halt on the Nilambur branch line.', board: RAIL_X + 3.6 }
+];
+
+function buildMinorStation(z, name) {
+  const g = new THREE.Group();
+  g.position.set(RAIL_X, RAIL_H, z);
+  const PH = 0.75;
+  g.add(mk(texBox(3.2, PH, 16, 2), M.stone, 3.6, PH / 2 - 0.05, 0));
+  g.add(mk(texBox(3.4, 0.1, 16.2, 2), M.plaster, 3.6, PH - 0.02, 0, false, true));
+  g.add(mk(new THREE.BoxGeometry(0.12, 0.03, 16), new THREE.MeshStandardMaterial({ color: 0xe8c020, roughness: 0.8 }), 2.05, PH + 0.06, 0, false, true));
+  // Waiting shelter
+  for (const zz of [-3, 3]) g.add(mk(new THREE.CylinderGeometry(0.08, 0.08, 2.6, 8), M.steelDark, 5.1, PH + 1.3, zz));
+  g.add(mk(texBox(3.0, 0.14, 7, 2), M.roof, 5.0, PH + 2.65, 0, true, false));
+  // Bench
+  g.add(mk(new THREE.BoxGeometry(0.5, 0.1, 1.8), M.woodDark, 4.6, PH + 0.5, 0));
+  g.add(mk(new THREE.BoxGeometry(0.08, 0.45, 1.8), M.woodDark, 4.75, PH + 0.72, 0));
+  // Name board
+  const nb = new THREE.MeshStandardMaterial({ map: signTexture([name.toUpperCase(), 'Nilambur - Shoranur Line'], { w: 640, h: 120, size: 44, bg: '#1e4c8a', fg: '#ffffff', border: '#ffffff' }), roughness: 0.6 });
+  const b = mk(new THREE.BoxGeometry(4.0, 0.8, 0.1), nb, 3.6, PH + 2.1, 7.6);
+  g.add(b);
+  // Lamp
+  g.add(mk(new THREE.CylinderGeometry(0.08, 0.1, 3.2, 8), M.steelDark, 5.6, PH + 1.6, 0));
+  g.add(mk(new THREE.SphereGeometry(0.18, 8, 8), M.lampGlow, 5.6, PH + 3.15, 0, false));
+  const pl = new THREE.PointLight(0xffd090, 0, 20, 1.6);
+  pl.position.set(5.6, PH + 3.0, 0);
+  g.add(pl);
+  ANIM.nightLights.push(pl);
+  scene.add(g);
+  addBoxCollider(RAIL_X + 3.6, z, 2.0, 8.5);
+  GROUND_EXTRAS.push((x, zz) => (Math.abs(x - (RAIL_X + 3.6)) < 1.8 && Math.abs(zz - z) < 8) ? RAIL_H + PH : null);
+}
+
+function buildMinorStations() {
+  STATIONS.forEach(st => { if (!st.major) buildMinorStation(st.z, st.name); });
+}
+
+// ---------- Train stop-go schedule ----------
+// The train runs the length of the line, dwelling at each of the six stations so players can board and exit.
+const TRAIN_STATE = { pos: -300, i: 0, state: 'running', dwell: 0, speed: 15, dwellTime: 8 };
+
+function updateTrain(dt) {
+  if (!ANIM.train) return;
+  const T = TRAIN_STATE;
+  if (T.state === 'dwell') {
+    T.dwell -= dt;
+    if (T.dwell <= 0) {
+      T.state = 'running';
+      T.i++;
+      if (T.i >= STATIONS.length) { T.pos = -300; T.i = 0; }
+    }
+  } else {
+    const target = STATIONS[T.i].z;
+    T.pos = Math.min(T.pos + T.speed * dt, target);
+    if (T.pos >= target) { T.state = 'dwell'; T.dwell = T.dwellTime; }
+  }
+  ANIM.train.position.z = T.pos;
 }
