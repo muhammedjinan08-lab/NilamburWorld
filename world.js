@@ -1123,7 +1123,15 @@ function buildNilamburPalace() {
 }
 
 // ---------- Landmark: Adyanpara Waterfalls ----------
-function makeRockMass(w, h, d, seed, wx, wz, groove) {
+// `clip` (optional): { x, side, yyLo, yyHi } hard-clamps the final X of any vertex whose yy falls in
+// [yyLo, yyHi] to stay on one side of `x` (side>0 clamps to <=x, side<0 clamps to >=x) - used to carve
+// a guaranteed-open corridor through this rock for the railway tunnel. The per-vertex jitter below can
+// push a vertex up to +-9 units off its nominal position, which is far more than the couple of metres
+// of "clearance" a caller might assume just from choosing non-overlapping nominal box widths - this
+// clip is the only thing that actually guarantees the corridor stays open regardless of the noise seed
+// (found the hard way: the tunnel looked solid from one test angle but was still visibly blocked by
+// jittered rock reaching into the corridor from both sides until this was added).
+function makeRockMass(w, h, d, seed, wx, wz, groove, clip) {
   const g = new THREE.BoxGeometry(w, h, d, Math.round(w * 0.7), Math.round(h * 0.7), Math.round(d * 0.6));
   const p = g.attributes.position;
   const front = d / 2;
@@ -1144,7 +1152,11 @@ function makeRockMass(w, h, d, seed, wx, wz, groove) {
     }
     // taper toward the top
     const taper = 1 - 0.18 * (yy / h);
-    p.setXYZ(i, x * taper + dx, y + dy, z + dz);
+    let fx = x * taper + dx;
+    if (clip && yy >= clip.yyLo && yy <= clip.yyHi) {
+      fx = clip.side > 0 ? Math.min(fx, clip.x) : Math.max(fx, clip.x);
+    }
+    p.setXYZ(i, fx, y + dy, z + dz);
   }
   g.computeVertexNormals();
   // moss/rock vertex colours
@@ -1174,12 +1186,17 @@ function buildAdyanparaWaterfall() {
   const H = 36;
   // The main mass is narrower than it used to be (62->48) and the east flank is pushed further out
   // (42->50) to open a clear 12-unit corridor at local x 24-36 - that's exactly where the railway
-  // (world x = RAIL_X = -70, i.e. local x = RAIL_X - p.x) cuts through this cliff; see
-  // buildRailwayTunnel() below, which bores a real tunnel through that gap instead of letting the
-  // track clip through solid rock.
-  g.add(mk(makeRockMass(48, H, 24, 3, 0, 0, true), M.rock, 0, H / 2 - 1, 0));
+  // (world x = RAIL_X = -70, i.e. local x = RAIL_X - p.x) cuts through this cliff. Non-overlapping
+  // nominal widths alone aren't enough to actually keep it open, though: makeRockMass's per-vertex
+  // jitter can push a vertex up to ~9 units off its nominal position, easily enough to bridge a 12-unit
+  // gap from either side (confirmed this was happening - the tunnel looked fine from one screenshot
+  // angle but was still visibly blocked). `clip` hard-clamps both flanks to never cross the corridor
+  // boundary, in the y-band the corridor/tunnel roof actually occupy (yy 0-11, see makeRockMass).
+  const RAIL_LX = RAIL_X - p.x, CORR_HW = 6;               // corridor centre-x and half-width, local
+  const rightRockOX = 50;                                  // east flank's own mk() x-offset, below
+  g.add(mk(makeRockMass(48, H, 24, 3, 0, 0, true, { x: RAIL_LX - CORR_HW, side: 1, yyLo: 0, yyHi: 11 }), M.rock, 0, H / 2 - 1, 0));
   g.add(mk(makeRockMass(26, 27, 22, 8, 0, 0, false), M.rock, -40, 27 / 2 - 1, 3));
-  g.add(mk(makeRockMass(28, 22, 20, 13, 0, 0, false), M.rock, 50, 22 / 2 - 1, 4));
+  g.add(mk(makeRockMass(28, 22, 20, 13, 0, 0, false, { x: RAIL_LX + CORR_HW - rightRockOX, side: -1, yyLo: 0, yyHi: 11 }), M.rock, rightRockOX, 22 / 2 - 1, 4));
 
   // Falling water: two layered scrolling streak sheets
   for (let i = 0; i < 2; i++) {
@@ -1259,10 +1276,11 @@ function buildAdyanparaWaterfall() {
   // (now narrower) main rock and the (now shifted-out) east flank. Only the roof and portals are new
   // geometry - the corridor itself is just left empty, walled in by the two existing rock masses.
   {
-    const railLX = RAIL_X - p.x;   // local x of the track inside this group (30)
-    const cHalfW = 6, cZ = 13, floorY = -1, roofY = 8;
+    const railLX = RAIL_LX, cHalfW = CORR_HW, cZ = 13, floorY = -1, roofY = 8;
     // Rock roof spanning the gap, tying the two flanks back into one continuous mountain silhouette
-    // (kept a couple of metres under the crest platform built below, so the two don't intersect)
+    // (kept a couple of metres under the crest platform built below, so the two don't intersect). Its
+    // own underside needs no clip: makeRockMass already zeroes jitter at yy=0 (its own bottom face, the
+    // "keep base anchored" line above) so it can't sag into the corridor regardless of the noise seed.
     g.add(mk(makeRockMass(cHalfW * 2, 21, cZ * 2 + 2, 21, 0, 0, false), M.rock, railLX, roofY + 10.5, 0));
     // Masonry portals at both mouths (a plain arch frame, in the same stone material as the town's
     // colonial-era buildings) plus a dark fill so the bore reads as a real shadowed tunnel from outside
@@ -1306,8 +1324,11 @@ function buildAdyanparaWaterfall() {
         return y0 + lerp(yA, yB, clamp(t, 0, 1)) + 0.08;
       });
     }
-    function flatDeck(xc, zc, hw, hd, y) {
-      g.add(mk(texBox(hw * 2, 0.14, hd * 2, 2), M.wood, xc, y, zc, false, true));
+    // `mat`/`thick` let this double as a wooden plank (the stairs) or a chunky rock slab (the ridge to
+    // the spring, below) - `y` is always the intended walkable *top* surface height, not the mesh centre.
+    function flatDeck(xc, zc, hw, hd, y, mat, thick) {
+      mat = mat || M.wood; thick = thick || 0.14;
+      g.add(mk(texBox(hw * 2, thick, hd * 2, 2), mat, xc, y - thick / 2 + 0.07, zc, false, true));
       GROUND_EXTRAS.push((wx, wz) => {
         const lx = wx - p.x, lz = wz - p.z;
         if (Math.abs(lx - xc) > hw + 0.2 || Math.abs(lz - zc) > hd + 0.2) return null;
@@ -1325,7 +1346,7 @@ function buildAdyanparaWaterfall() {
     // them unreachable, since groundHeight always returns the tallest candidate for a given x/z column
     // (caught this by probing groundHeight along the lower flights after first routing the deck across
     // all of them). This sits right over the tunnel's rock roof (kept a couple of metres lower, above,
-    // for clearance) - the spring itself is visible from here, just across the summit to the west.
+    // for clearance).
     flatDeck(29.5, 22, 7.5, 2, TOP_Y);
     // Base landing + a small marker so the trailhead is easy to spot from the pool
     flatDeck(12, 12, 2.2, 2.4, 0);
@@ -1333,6 +1354,24 @@ function buildAdyanparaWaterfall() {
     tb.position.set(9, 0.6, 11);
     tb.rotation.y = -2.0;
     g.add(tb);
+
+    // Rock ridge from the crest deck to the spring: the deck and the rock mass it's built beside were
+    // two disconnected meshes with open air between them, which both looked wrong and made the spring
+    // unreachable - this closes that gap with a walkable "hill" extension instead of another wooden
+    // structure, routed to avoid both the switchback below (GROUND_EXTRAS has no notion of "level",
+    // same issue as the crest deck above) and the rock mass's own solid body. A raycast probe against
+    // the actual (jittered) rock geometry found its real surface sits around local y 35-36 near the
+    // spring, not at TOP_Y (32.7, chosen to match the spring's own recessed height) - the south leg
+    // (clear of the rock entirely, z>12) stays at TOP_Y, but the leg that actually crosses over the
+    // rock's body steps up to ROCK_Y so it sits on top of the real surface instead of inside it.
+    // Thick, chunky slabs (not thin planks) so this reads as an extension of the hillside rather than a
+    // floating platform - a first pass at 1.2 units thick looked exactly like that (confirmed by
+    // screenshot: two dark plates hanging in open air with a visible gap beneath and between them).
+    const ROCK_Y = 35.8, RIDGE_THICK = 9;
+    flatDeck(15, 28, 15, 4, TOP_Y, M.rock, RIDGE_THICK);       // bar south of the switchback
+    flatDeck(9.5, 21, 1.6, 8.5, TOP_Y, M.rock, RIDGE_THICK);   // north leg, still south of the rock (z>=13)
+    flatDeck(9.5, 7.5, 1.6, 6, ROCK_Y, M.rock, RIDGE_THICK);   // steps up onto the rock's real surface
+    flatDeck(4, 6, 5, 4, ROCK_Y, M.rock, RIDGE_THICK);         // landing right beside the spring
   }
 
   scene.add(g);
