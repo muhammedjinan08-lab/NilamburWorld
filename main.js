@@ -801,6 +801,7 @@ function animate() {
   windUniform.value = clock.t;
 
   updatePlayerMovement(dt);
+  updateEngineAudio();
   updateCamera(dt);
   updateEnvironment(dt, false);
 
@@ -1238,7 +1239,7 @@ function setWeather(type) {
   else if (type === 'rain' && (state.timeOfDay < 6.5 || state.timeOfDay > 19)) setTime(15);
 }
 
-// --- Web Audio Synthesizer: wind, river, rain, birds, crickets ---
+// --- Web Audio Synthesizer: wind, river, rain, birds, crickets, engines, paddling ---
 let audioCtx, audioNodes = null;
 function noiseBuffer(ctx, secs) {
   const b = ctx.createBuffer(1, ctx.sampleRate * secs, ctx.sampleRate);
@@ -1247,6 +1248,15 @@ function noiseBuffer(ctx, secs) {
   for (let i = 0; i < d.length; i++) { const w = Math.random() * 2 - 1; last = (last + 0.04 * w) / 1.04; d[i] = w * 0.5 + last * 3; }
   return b;
 }
+
+// Per-vehicle-type engine tone: f0/f1 = idle/redline oscillator frequency, filt0/filt1 = lowpass
+// sweep as it revs, chug = putter-tremolo rate in Hz for small two-stroke-ish engines (0 = smooth).
+const ENGINE_PARAMS = {
+  car: { wave: 'sawtooth', f0: 62, f1: 130, filt0: 500, filt1: 1100, q: 1.0, gain: 0.10, noise: 0.025, chug: 0 },
+  bike: { wave: 'square', f0: 110, f1: 340, filt0: 900, filt1: 2400, q: 0.7, gain: 0.075, noise: 0.02, chug: 18 },
+  bus: { wave: 'sawtooth', f0: 40, f1: 78, filt0: 260, filt1: 480, q: 1.3, gain: 0.15, noise: 0.055, chug: 0 },
+  auto: { wave: 'square', f0: 140, f1: 260, filt0: 700, filt1: 1500, q: 1.1, gain: 0.065, noise: 0.02, chug: 24 }
+};
 
 function initAudioSynth() {
   const btn = document.getElementById('btn-audio-toggle');
@@ -1276,6 +1286,9 @@ function startSoundscape() {
     return { g: g, f: f };
   }
   const wind = loop('lowpass', 420, 0.6), river = loop('bandpass', 1100, 0.4), fall = loop('bandpass', 2400, 0.3), rainN = loop('highpass', 2500, 0.5);
+  // Ambient traffic hum (nearby scripted vehicles, heard while on foot) and daytime forest/insect
+  // rustle (the crickets below are the night layer) - both just filtered noise loops like wind/river.
+  const traffic = loop('lowpass', 550, 0.5), nature = loop('bandpass', 3200, 0.6);
   // Crickets: amplitude-modulated high tone
   const cr = ctx.createOscillator(); cr.type = 'sine'; cr.frequency.value = 4300;
   const crg = ctx.createGain(); crg.gain.value = 0;
@@ -1284,7 +1297,35 @@ function startSoundscape() {
   const crMod = ctx.createGain(); crMod.gain.value = 0.5;
   lfo.connect(lfoG); lfoG.connect(crMod.gain); cr.connect(crMod); crMod.connect(crg); crg.connect(master);
   cr.start(); lfo.start();
-  audioNodes = { master: master, wind: wind, river: river, fall: fall, rain: rainN, crick: crg };
+
+  // Vehicle engines: one persistent two-oscillator voice per drivable type, silent until that type
+  // is actually being driven (see updateEngineAudio) - car/bus are smooth sawtooth engines, bike/auto
+  // get a putter-tremolo on the gain for a two-stroke feel. Kayaks have no engine (see playPaddleSplash).
+  const engines = {};
+  for (const type in ENGINE_PARAMS) {
+    const p = ENGINE_PARAMS[type];
+    const osc = ctx.createOscillator(); osc.type = p.wave; osc.frequency.value = p.f0;
+    const osc2 = ctx.createOscillator(); osc2.type = p.wave; osc2.frequency.value = p.f0 * 1.005; osc2.detune.value = 6;
+    const filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = p.filt0; filt.Q.value = p.q;
+    const gain = ctx.createGain(); gain.gain.value = 0;
+    osc.connect(filt); osc2.connect(filt); filt.connect(gain); gain.connect(master);
+    osc.start(); osc2.start();
+    const eng = { osc: osc, osc2: osc2, filt: filt, gain: gain };
+    if (p.chug > 0) {
+      const trem = ctx.createOscillator(); trem.type = 'sine'; trem.frequency.value = p.chug;
+      const tremGain = ctx.createGain(); tremGain.gain.value = 0;
+      trem.connect(tremGain); tremGain.connect(gain.gain); trem.start();
+      eng.trem = trem; eng.tremGain = tremGain;
+    }
+    engines[type] = eng;
+  }
+  const engineNoise = loop('lowpass', 650, 0.5);
+
+  audioNodes = {
+    master: master, wind: wind, river: river, fall: fall, rain: rainN, crick: crg,
+    traffic: traffic, nature: nature, engines: engines, engineNoise: engineNoise,
+    splashBuf: noiseBuffer(ctx, 0.4)
+  };
 
   // Bird chirps
   setInterval(() => {
@@ -1310,7 +1351,68 @@ function updateSoundscape() {
   audioNodes.river.g.gain.setTargetAtTime(0.16 * Math.exp(-dRiver / 35), t, 0.4);
   audioNodes.fall.g.gain.setTargetAtTime(0.5 * Math.exp(-dFall / 40), t, 0.4);
   audioNodes.rain.g.gain.setTargetAtTime(0.22 * env.rain, t, 0.6);
-  audioNodes.crick.g.gain.setTargetAtTime(0.012 * clamp((env.night - 0.3) * 1.5, 0, 1) * (1 - env.rain), t, 0.8);
+  audioNodes.crick.gain.setTargetAtTime(0.012 * clamp((env.night - 0.3) * 1.5, 0, 1) * (1 - env.rain), t, 0.8);
+
+  // Daytime forest/insect rustle - same idea as the night crickets above, but tied to tree cover
+  // instead of the clock, so the teak grove and other forested patches read as alive during the day.
+  const forestNear = typeof forestMask === 'function' ? forestMask(p.x, p.z) : 0;
+  audioNodes.nature.g.gain.setTargetAtTime(0.06 * forestNear * env.day * (1 - env.rain * 0.6), t, 0.8);
+
+  // Ambient traffic: the nearest still-scripted (traffic-loop) vehicle, heard faintly while on foot -
+  // suppressed while actually driving/riding, since the engine/paddle sounds take over there.
+  if (!state.driving && !state.ridingVehicle && typeof VEHICLES !== 'undefined') {
+    let bd = 1e9;
+    for (let i = 0; i < VEHICLES.length; i++) {
+      const vv = VEHICLES[i];
+      if (!vv.mover) continue;
+      const d = Math.hypot(p.x - vv.g.position.x, p.z - vv.g.position.z);
+      if (d < bd) bd = d;
+    }
+    audioNodes.traffic.g.gain.setTargetAtTime(bd < 45 ? 0.06 * Math.exp(-bd / 16) : 0, t, 0.6);
+  } else {
+    audioNodes.traffic.g.gain.setTargetAtTime(0, t, 0.6);
+  }
+}
+
+// Engine pitch/volume for whichever vehicle is currently being driven - called every frame from
+// animate() so it responds to throttle instantly, unlike the 250ms ambience tick above. Kayaks have
+// no engine; see playPaddleSplash(), triggered per paddle stroke in updateVehicleDriving instead.
+function updateEngineAudio() {
+  if (!audioNodes || !audioNodes.engines) return;
+  const t = audioCtx.currentTime;
+  const v = state.driving;
+  const activeType = v && ENGINE_PARAMS[v.type] ? v.type : null;
+  let activeSf = 0;
+  for (const type in audioNodes.engines) {
+    const e = audioNodes.engines[type], p = ENGINE_PARAMS[type];
+    if (type === activeType) {
+      const spec = VEH_SPECS[type] || VEH_SPECS.car;
+      const sf = clamp(Math.abs(v.spd) / spec.max, 0, 1);
+      activeSf = sf;
+      const freq = lerp(p.f0, p.f1, sf);
+      e.osc.frequency.setTargetAtTime(freq, t, 0.08);
+      e.osc2.frequency.setTargetAtTime(freq * 1.005, t, 0.08);
+      e.filt.frequency.setTargetAtTime(lerp(p.filt0, p.filt1, sf), t, 0.15);
+      e.gain.gain.setTargetAtTime(p.gain * (0.55 + 0.45 * sf), t, 0.12);
+      if (e.tremGain) { e.tremGain.gain.setTargetAtTime(p.gain * 0.35, t, 0.2); e.trem.frequency.setTargetAtTime(p.chug * (0.5 + sf), t, 0.2); }
+    } else {
+      e.gain.gain.setTargetAtTime(0, t, 0.25);
+      if (e.tremGain) e.tremGain.gain.setTargetAtTime(0, t, 0.25);
+    }
+  }
+  audioNodes.engineNoise.g.gain.setTargetAtTime(activeType ? ENGINE_PARAMS[activeType].noise * (0.4 + 0.6 * activeSf) : 0, t, 0.15);
+}
+
+// A single short filtered noise burst per paddle stroke - see the kayak branch of updateVehicleDriving.
+function playPaddleSplash() {
+  if (!audioCtx || !audioNodes || state.audioMuted) return;
+  const ctx = audioCtx, t = ctx.currentTime;
+  const src = ctx.createBufferSource(); src.buffer = audioNodes.splashBuf;
+  const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1400 + Math.random() * 700; f.Q.value = 0.6;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.16, t + 0.01); g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+  src.connect(f); f.connect(g); g.connect(audioNodes.master);
+  src.start(t); src.stop(t + 0.3);
 }
 
 // --- Event Listeners Setup ---
@@ -1656,6 +1758,8 @@ function updateVehicleDriving(dt) {
       r.armR.shoulder.rotation.z = 0.08 - sw * 0.3;
       r.armL.shoulder.rotation.x = -0.45 + sw * 0.15;
       r.armR.shoulder.rotation.x = -0.45 - sw * 0.15;
+      const half = Math.floor(v.paddlePhase / Math.PI);
+      if (half !== v._paddleHalf) { v._paddleHalf = half; playPaddleSplash(); }
     }
     camRig.idleTime = 0;
     document.getElementById('coords-text').innerText = `X: ${Math.round(v.x)} | Z: ${Math.round(v.z)}`;
