@@ -821,7 +821,15 @@ function updateCamera(dt) {
   const wantDist = state.isCameraOrbit ? camRig.distTarget : Math.min(camRig.distTarget, 10);
   const targetDist = state.isCameraOrbit ? wantDist : 9;
   camRig.dist += (targetDist - camRig.dist) * Math.min(1, dt * 4);
-  if (state.isCameraOrbit && !camRig.dragging && camRig.idleTime > 3) camRig.yaw += dt * 0.07;
+
+  // While driving or riding the train, lock the camera directly behind, facing the same way it's
+  // travelling ("always show the straight/front view") so steering reads correctly - free orbit and
+  // the idle auto-rotate are both suspended.
+  const lockYaw = state.driving ? state.driving.yaw + Math.PI : (state.ridingTrain ? Math.PI : null);
+  if (lockYaw !== null) {
+    camRig.yaw = lockYaw;   // hard lock, no lag - the view must stay exactly straight behind while driving
+    camRig.pitch += (0.22 - camRig.pitch) * Math.min(1, dt * 4);
+  } else if (state.isCameraOrbit && !camRig.dragging && camRig.idleTime > 3) camRig.yaw += dt * 0.07;
 
   const tx = p.x, ty = p.y + 1.55, tz = p.z;
   const cp = Math.cos(camRig.pitch), sp = Math.sin(camRig.pitch);
@@ -1129,7 +1137,7 @@ function setupEventListeners() {
   // Mouse look: drag to orbit, wheel to zoom
   const cont = document.getElementById('canvas-container');
   let lx = 0, ly = 0;
-  cont.addEventListener('mousedown', (e) => { camRig.dragging = true; lx = e.clientX; ly = e.clientY; });
+  cont.addEventListener('mousedown', (e) => { if (state.driving || state.ridingTrain) return; camRig.dragging = true; lx = e.clientX; ly = e.clientY; });
   window.addEventListener('mouseup', () => { camRig.dragging = false; });
   window.addEventListener('mousemove', (e) => {
     if (!camRig.dragging) return;
@@ -1255,6 +1263,7 @@ function enterVehicle(v) {
   playerMesh.parent.visible = false;
   camRig._savedDist = camRig.distTarget;
   camRig.distTarget = (VEH_SPECS[v.type] || VEH_SPECS.car).camDist;
+  camRig.yaw = v.yaw + Math.PI;   // snap straight in behind it - see updateCamera for the ongoing lock
   const icon = v.type === 'bus' ? '🚌' : v.type === 'bike' ? '🏍️' : '🚗';
   triggerLandmarkPopup(icon + ' Driving', 'WASD to steer, SPACE to brake, E to get out.');
 }
@@ -1282,8 +1291,8 @@ function updateVehicleDriving(dt) {
   let inF = 0, inR = 0;
   if (keyState['KeyW'] || keyState['ArrowUp']) inF += 1;
   if (keyState['KeyS'] || keyState['ArrowDown']) inF -= 1;
-  if (keyState['KeyD'] || keyState['ArrowRight']) inR += 1;
-  if (keyState['KeyA'] || keyState['ArrowLeft']) inR -= 1;
+  if (keyState['KeyD'] || keyState['ArrowRight']) inR -= 1;
+  if (keyState['KeyA'] || keyState['ArrowLeft']) inR += 1;
 
   if (keyState['Space']) v.spd += (0 - v.spd) * Math.min(1, dt * 6);
   else if (inF > 0) v.spd = Math.min(s.max, v.spd + s.acc * dt);
@@ -1336,6 +1345,7 @@ function boardTrain(st) {
   playerMesh.parent.visible = false;
   camRig._savedDist = camRig.distTarget;
   camRig.distTarget = 22;
+  camRig.yaw = Math.PI;   // snap straight in behind it (the train always travels toward +z)
   const next = STATIONS[(TRAIN_STATE.i + 1) % STATIONS.length];
   triggerLandmarkPopup('🚆 Boarded the train', 'Riding towards ' + next.name + '. Press E to get off at any stop.');
 }
