@@ -26,6 +26,9 @@
       </div>
     </div>
     <div class="header-actions">
+      <button class="btn-icon" id="btn-my-character" title="Change your name and appearance">
+        <span>👤</span> My Character
+      </button>
       <button class="btn-icon" id="btn-audio-toggle">
         <span id="audio-icon">🔊</span> Audio Soundscape
       </button>
@@ -157,13 +160,41 @@
   <!-- Toasts (friend requests, notices) -->
   <div id="toast-area"></div>
 
-  <!-- Choose explorer name -->
+  <!-- Character creation: name + appearance, shown before the player spawns -->
   <div class="modal-overlay" id="name-modal">
-    <form class="modal-box glass-panel name-box" id="name-form">
+    <form class="modal-box glass-panel name-box char-box" id="name-form">
       <h2>🌴 Welcome, Explorer!</h2>
-      <p>Pick a name. Friends find you by it, and it's shown above your character.</p>
+      <p>Create your look, then jump in. Friends find you by your name, and everyone else sees this look too.</p>
       <input type="text" id="name-input" class="chat-input" placeholder="Your explorer name" maxlength="16" autocomplete="off">
       <div id="name-error" class="name-error"></div>
+
+      <div class="char-section">
+        <div class="char-label">Skin tone</div>
+        <div class="swatch-row" id="skin-swatches"></div>
+      </div>
+
+      <div class="char-section">
+        <div class="char-label">Hairstyle</div>
+        <div class="option-row" id="hair-style-options"></div>
+      </div>
+      <div class="char-section" id="hair-color-section">
+        <div class="char-label">Hair colour</div>
+        <div class="swatch-row" id="hair-swatches"></div>
+      </div>
+      <div class="char-section" id="flower-section">
+        <label class="char-check"><input type="checkbox" id="flower-check"> 🌸 Flower accent</label>
+      </div>
+
+      <div class="char-section">
+        <div class="char-label">Outfit</div>
+        <div class="option-row" id="outfit-options"></div>
+      </div>
+
+      <div class="char-section">
+        <div class="char-label">Footwear</div>
+        <div class="option-row" id="shoe-options"></div>
+      </div>
+
       <div class="name-actions">
         <button type="submit" class="btn-teleport">Play online</button>
         <button type="button" class="btn-teleport" id="name-offline">Play offline</button>

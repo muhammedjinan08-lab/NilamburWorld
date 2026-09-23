@@ -695,3 +695,22 @@ body, html {
 .name-error { min-height: 16px; color: #ff8a80; font-size: 12px; }
 .name-actions { display: flex; gap: 8px; }
 .name-actions .btn-teleport { flex: 1; text-align: center; padding: 10px; }
+
+/* ---------- Character creation ---------- */
+.char-box { width: 560px; max-height: 88vh; overflow-y: auto; }
+.char-section { margin-top: 6px; }
+.char-label { font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
+.swatch-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch-btn {
+  width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.15);
+  cursor: pointer; padding: 0; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+.swatch-btn.active { border-color: var(--primary-emerald); box-shadow: 0 0 0 2px rgba(0, 230, 118, 0.35); }
+.option-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.option-btn {
+  background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.12); color: var(--text-main);
+  padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor: pointer; font-family: var(--font-main);
+}
+.option-btn:hover { background: rgba(0, 230, 118, 0.12); }
+.option-btn.active { background: var(--primary-emerald); color: #000; font-weight: 700; border-color: var(--primary-emerald); }
+.char-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-main); cursor: pointer; }

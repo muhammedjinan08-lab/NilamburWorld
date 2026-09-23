@@ -375,63 +375,358 @@ function buildWorld() {
   camRig.yaw = 0.9;
 }
 
+// --- Character appearance: skin/hair/clothing/shoes, shared by the local player and every remote
+// avatar (multiplayer.js calls buildHumanRig() too, so everyone gets the same humanized body). ---
+
+// Realistic, non-garish spreads for the swatches shown in the character-creation screen.
+const SKIN_TONES = [0xffe0bd, 0xf1c27d, 0xe0ac69, 0xc68642, 0xa5673f, 0x8d5524, 0x6b4226, 0x4a2c17];
+const HAIR_COLORS = [0x0b0a08, 0x2a1a10, 0x4a2f1c, 0x6b4a2a, 0x9a7a4a, 0x8a8a8a, 0xe8e2d0, 0x7a2a1c];
+const HAIR_STYLE_LIST = [
+  ['short', 'Short'], ['medium', 'Medium'], ['long', 'Long / loose'], ['ponytail', 'Ponytail'],
+  ['braid', 'Braid / plait'], ['bun', 'Bun'], ['bald', 'Bald / shaved'], ['cap', 'Cap-covered']
+];
+const SHOE_LIST = [
+  ['sneakers', 'Sneakers'], ['sandals', 'Sandals / chappals'], ['formal', 'Formal shoes'], ['barefoot', 'Barefoot']
+];
+// Each outfit is a full look (upper + lower), including Kerala everyday and festive traditional wear.
+// mundu = wraparound lower garment (like a dhoti); kasavu = the gold/zari border; angavastram/pallu/
+// dupatta are the draped shoulder-cloth accessories toggled on for the outfits that use them.
+const OUTFITS = {
+  tshirt_jeans: { label: 'T-Shirt & Jeans', upper: 'tshirt', upperColor: 0x2f8a76, lower: 'jeans', lowerColor: 0x2e4a72 },
+  shirt_trousers: { label: 'Shirt & Trousers', upper: 'shirt', upperColor: 0xdfe6ee, lower: 'trousers', lowerColor: 0x3a3f4a },
+  kurta_leggings: { label: 'Kurta & Leggings', upper: 'kurta', upperColor: 0xb0563a, lower: 'leggings', lowerColor: 0x2a2a30 },
+  shorts_tee: { label: 'T-Shirt & Shorts', upper: 'tshirt', upperColor: 0xdd8a2a, lower: 'shorts', lowerColor: 0x35506a },
+  mundu_shirt: { label: 'Mundu & Shirt', upper: 'shirt', upperColor: 0xe7e2d3, lower: 'mundu', lowerColor: 0xf3efe2 },
+  jubba_mundu: { label: 'Jubba & Mundu', upper: 'jubba', upperColor: 0xf0ece0, lower: 'mundu', lowerColor: 0xf3efe2 },
+  kasavu_mundu: { label: 'Kasavu Mundu (festive)', upper: 'bare', upperColor: 0xb07a50, lower: 'mundu_kasavu', lowerColor: 0xf7f3e6, angavastram: true },
+  kasavu_saree: { label: 'Kasavu Saree', upper: 'blouse', upperColor: 0xaa3a44, lower: 'saree', lowerColor: 0xf7f3e6, pallu: true },
+  churidar: { label: 'Churidar / Salwar', upper: 'kurta', upperColor: 0x5a7ab0, lower: 'churidar', lowerColor: 0xe8e2cf, dupatta: true }
+};
+const OUTFIT_LIST = Object.keys(OUTFITS).map(k => [k, OUTFITS[k].label]);
+
+function defaultAppearance() {
+  return { name: '', skin: SKIN_TONES[2], hairStyle: 'short', hairColor: HAIR_COLORS[0], flower: false, outfit: 'tshirt_jeans', shoes: 'sneakers' };
+}
+function normalizeAppearance(a) {
+  const d = defaultAppearance();
+  a = a || {};
+  return {
+    name: typeof a.name === 'string' ? a.name.slice(0, 16) : d.name,
+    skin: Number.isFinite(+a.skin) ? (+a.skin) & 0xffffff : d.skin,
+    hairStyle: HAIR_STYLE_LIST.some(h => h[0] === a.hairStyle) ? a.hairStyle : d.hairStyle,
+    hairColor: Number.isFinite(+a.hairColor) ? (+a.hairColor) & 0xffffff : d.hairColor,
+    flower: !!a.flower,
+    outfit: OUTFITS[a.outfit] ? a.outfit : d.outfit,
+    shoes: SHOE_LIST.some(s => s[0] === a.shoes) ? a.shoes : d.shoes
+  };
+}
+const APPEARANCE_LS_KEY = 'nw_appearance';
+function loadAppearance() {
+  try { return normalizeAppearance(JSON.parse(localStorage.getItem(APPEARANCE_LS_KEY) || 'null')); }
+  catch (e) { return null; }
+}
+function saveAppearance(a) {
+  try { localStorage.setItem(APPEARANCE_LS_KEY, JSON.stringify(a)); } catch (e) { /* private mode */ }
+}
+
+// Geometry is built once and shared by every avatar (local + every remote player) - only materials
+// (colour) and mesh visibility (style/outfit/shoe choice) vary per rig, so this stays cheap even with
+// several explorers on screen. Never dispose() these - they are shared, not per-avatar.
+let RIG_GEO = null;
+function getRigGeo() {
+  if (RIG_GEO) return RIG_GEO;
+  const Cap = (r, l, cs, rs) => new THREE.CapsuleGeometry(r, l, cs, rs);
+  const Cyl = (rt, rb, h, s) => new THREE.CylinderGeometry(rt, rb, h, s);
+  const Sph = (r, ws, hs, ps, pl, ts, tl) => new THREE.SphereGeometry(r, ws, hs, ps, pl, ts, tl);
+  const Box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  RIG_GEO = {
+    pelvis: Cyl(0.185, 0.27, 0.28, 14),
+    waistBand: Cyl(0.2, 0.2, 0.05, 14),
+    chest: Cap(0.19, 0.32, 4, 12),
+    neck: Cyl(0.06, 0.074, 0.15, 10),
+    skull: Sph(0.13, 16, 14),
+    eye: Sph(0.017, 6, 6),
+    nose: Sph(0.019, 6, 6),
+    ear: Sph(0.02, 8, 6),
+    upperArm: Cap(0.062, 0.2, 4, 10),
+    forearm: Cap(0.049, 0.24, 4, 10),
+    wrist: Cyl(0.042, 0.05, 0.035, 8),
+    palm: Box(0.082, 0.1, 0.045),
+    thumb: Box(0.03, 0.06, 0.032),
+    thigh: Cap(0.086, 0.3, 4, 10),
+    calf: Cap(0.064, 0.32, 4, 10),
+    ankle: Cyl(0.05, 0.058, 0.04, 10),
+    footBase: Box(0.1, 0.065, 0.16),
+    footToe: Box(0.088, 0.055, 0.1),
+    hairShort: Sph(0.14, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.5),
+    hairMedium: Sph(0.145, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62),
+    hairLongSheet: Box(0.16, 0.36, 0.05),
+    ponytail: Cap(0.042, 0.26, 3, 8),
+    braidSeg: Cap(0.034, 0.09, 2, 8),
+    bun: Sph(0.07, 10, 8),
+    flowerPetal: Sph(0.018, 6, 6),
+    capDome: Sph(0.148, 14, 10, 0, Math.PI * 2, 0, Math.PI * 0.62),
+    capBrim: Box(0.2, 0.02, 0.08),
+    tunicSkirt: Cyl(0.24, 0.33, 0.46, 14),
+    skirtWrap: Cyl(0.26, 0.34, 0.95, 16),
+    goldBorder: Cyl(0.335, 0.345, 0.045, 16),
+    collar: Box(0.24, 0.05, 0.1),
+    clothStrip: Box(0.1, 0.5, 0.022),
+    sneakerBody: Box(0.11, 0.078, 0.175),
+    sneakerSole: Box(0.115, 0.028, 0.19),
+    sandalSole: Box(0.098, 0.02, 0.165),
+    sandalStrap: Box(0.085, 0.018, 0.018),
+    formalShoe: Box(0.1, 0.068, 0.18),
+    formalToe: Box(0.086, 0.05, 0.065)
+  };
+  return RIG_GEO;
+}
+
 // --- Player Avatar (articulated, animated) ---
-function buildPlayerAvatar() {
-  const playerGroup = new THREE.Group();
-  const body = new THREE.Group();     // playerMesh: rotates to face the walking direction
-  const S = (c, r) => new THREE.MeshStandardMaterial({ color: c, roughness: r === undefined ? 0.75 : r });
-  const skin = S(0xb07a50, 0.65), shirt = S(0x2f8a76, 0.9), mundu = S(0xf0ece0, 0.95), hair = S(0x17110d, 0.6), band = S(0xd98a1a, 0.9), sole = S(0x3a2a1a);
-  const add = (parent, geo, m, x, y, z) => { const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.castShadow = true; me.receiveShadow = true; parent.add(me); return me; };
+// buildHumanRig() is the single humanoid body builder shared by the local player (below) and every
+// remote explorer (see multiplayer.js's makeAvatar()) - one humanized rig definition, so everyone in
+// the world looks like a believable person and appearance customization applies identically to all.
+// The joint hierarchy (hips/torso/head, armL/armR.shoulder/elbow, legL/legR.hip/knee/foot) is kept
+// stable on purpose: animatePlayerRig(), setSeatedPose()/clearSeatedPose() and the vehicle entry/exit
+// code all pose the rig purely by rotating these named groups, so they keep working unchanged however
+// the meshes inside each group are dressed up.
+function buildHumanRig(appearance) {
+  appearance = normalizeAppearance(appearance);
+  const G = getRigGeo();
+  const add = (parent, geo, m, x, y, z, rx, ry, rz) => {
+    const me = new THREE.Mesh(geo, m);
+    me.position.set(x, y, z);
+    if (rx || ry || rz) me.rotation.set(rx || 0, ry || 0, rz || 0);
+    me.castShadow = true; me.receiveShadow = true;
+    parent.add(me);
+    return me;
+  };
+  const Smat = (c, r) => new THREE.MeshStandardMaterial({ color: c, roughness: r === undefined ? 0.75 : r });
 
-  // Pelvis + torso
+  // Every mesh's colour comes from one of these few shared materials, so recolouring an appearance
+  // choice (skin/hair/outfit/shoes) is just a handful of material.color.set() calls, never a rebuild.
+  const P = {
+    skinMat: Smat(0xb07a50, 0.6), hairMat: Smat(0x17110d, 0.55), upperMat: Smat(0x2f8a76, 0.9),
+    lowerMat: Smat(0xf0ece0, 0.92), accentMat: Smat(0xd4af37, 0.35), shoesMat: Smat(0x1a1a1a, 0.7),
+    soleMat: Smat(0x2a2018, 0.85), capMat: Smat(0x33465a, 0.85), flowerMat: Smat(0xfff6de, 0.5),
+    flowerCenterMat: Smat(0xf0c419, 0.4), darkMat: Smat(0x050505, 0.3)
+  };
+
+  const root = new THREE.Group();     // world-position group; scene.add()'s this
+  const body = new THREE.Group();     // rotates to face the walking/travel direction (== playerMesh)
+  root.add(body);
+
+  // Pelvis + lower-body wrap (mundu / kasavu mundu / saree skirt), attached to the hips like a real
+  // wrap garment so it doesn't swing with either individual leg.
   const hips = new THREE.Group(); hips.position.y = 0.98; body.add(hips);
-  const torso = new THREE.Group(); torso.position.y = 0.06; hips.add(torso);
-  const chest = add(torso, new THREE.CapsuleGeometry(0.2, 0.34, 4, 12), shirt, 0, 0.42, 0);
-  chest.scale.set(1.2, 1, 0.75);
-  add(hips, new THREE.CylinderGeometry(0.22, 0.31, 0.62, 14), mundu, 0, -0.14, 0); // mundu (dhoti)
-  add(hips, new THREE.CylinderGeometry(0.235, 0.235, 0.07, 14), band, 0, 0.16, 0);  // waist band
-  // Neck and head
-  add(torso, new THREE.CylinderGeometry(0.06, 0.07, 0.12, 8), skin, 0, 0.8, 0);
-  const head = new THREE.Group(); head.position.y = 0.98; torso.add(head);
-  const skull = add(head, new THREE.SphereGeometry(0.13, 16, 14), skin, 0, 0, 0);
-  skull.scale.set(0.95, 1.08, 1);
-  const hairCap = add(head, new THREE.SphereGeometry(0.138, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.52), hair, 0, 0.012, -0.01);
-  hairCap.rotation.x = -0.25;
-  add(head, new THREE.SphereGeometry(0.018, 6, 6), S(0x050505, 0.3), -0.045, 0.02, 0.122);
-  add(head, new THREE.SphereGeometry(0.018, 6, 6), S(0x050505, 0.3), 0.045, 0.02, 0.122);
-  add(head, new THREE.SphereGeometry(0.02, 6, 6), skin, 0, -0.015, 0.135);
+  add(hips, G.pelvis, P.skinMat, 0, -0.08, 0);
+  const waistBand = add(hips, G.waistBand, P.accentMat, 0, 0.14, 0);
+  const skirtWrap = add(hips, G.skirtWrap, P.lowerMat, 0, -0.44, 0);
+  const goldBorder = add(hips, G.goldBorder, P.accentMat, 0, -0.85, 0);
 
-  // Arms
+  // Torso: chest, tunic extension (kurta/jubba), collar, and the draped-cloth accessories.
+  const torso = new THREE.Group(); torso.position.y = 0.06; hips.add(torso);
+  const chest = add(torso, G.chest, P.upperMat, 0, 0.42, 0);
+  chest.scale.set(1.18, 1, 0.76);
+  const collar = add(torso, G.collar, P.upperMat, 0, 0.62, 0.13);
+  const tunicSkirt = add(torso, G.tunicSkirt, P.upperMat, 0, -0.16, 0);
+  const angavastram = add(torso, G.clothStrip, P.accentMat, 0.15, 0.3, 0.09, 0, 0, 0.55);
+  const pallu = add(torso, G.clothStrip, P.lowerMat, -0.13, 0.05, -0.08, 0, 0, -0.45);
+  pallu.scale.set(1.7, 1.6, 1);
+  const dupattaL = add(torso, G.clothStrip, P.accentMat, 0.12, 0.34, 0.1, 0.2, 0, 0.2);
+  const dupattaR = add(torso, G.clothStrip, P.accentMat, -0.12, 0.34, 0.1, 0.2, 0, -0.2);
+
+  // Neck and head - a proper tapered neck cylinder bridges the shoulders to the head so it reads as
+  // anatomy rather than a head simply floating above the torso.
+  add(torso, G.neck, P.skinMat, 0, 0.79, 0);
+  const head = new THREE.Group(); head.position.y = 0.98; torso.add(head);
+  const skull = add(head, G.skull, P.skinMat, 0, 0, 0);
+  skull.scale.set(0.95, 1.08, 1);
+  add(head, G.eye, P.darkMat, -0.045, 0.02, 0.12);
+  add(head, G.eye, P.darkMat, 0.045, 0.02, 0.12);
+  add(head, G.nose, P.skinMat, 0, -0.015, 0.132);
+  add(head, G.ear, P.skinMat, -0.128, -0.005, 0);
+  add(head, G.ear, P.skinMat, 0.128, -0.005, 0);
+
+  // Hairstyles: every variant is pre-built once and toggled by visibility, so switching styles never
+  // rebuilds geometry - just flips which group is shown.
+  const hair = {};
+  hair.short = new THREE.Group(); head.add(hair.short);
+  add(hair.short, G.hairShort, P.hairMat, 0, 0.01, -0.01, -0.2);
+  hair.medium = new THREE.Group(); head.add(hair.medium);
+  add(hair.medium, G.hairMedium, P.hairMat, 0, 0.005, -0.015, -0.22);
+  hair.long = new THREE.Group(); head.add(hair.long);
+  add(hair.long, G.hairMedium, P.hairMat, 0, 0.005, -0.015, -0.22);
+  add(hair.long, G.hairLongSheet, P.hairMat, 0, -0.18, -0.1, 0.12);
+  hair.ponytail = new THREE.Group(); head.add(hair.ponytail);
+  add(hair.ponytail, G.hairMedium, P.hairMat, 0, 0.005, -0.015, -0.22);
+  add(hair.ponytail, G.ponytail, P.hairMat, 0, -0.05, -0.16, 0.5);
+  hair.braid = new THREE.Group(); head.add(hair.braid);
+  add(hair.braid, G.hairMedium, P.hairMat, 0, 0.005, -0.015, -0.22);
+  { let by = -0.02, bz = -0.14; for (let i = 0; i < 4; i++) { add(hair.braid, G.braidSeg, P.hairMat, (i % 2 ? 0.012 : -0.012), by, bz); by -= 0.095; bz -= 0.01; } }
+  hair.bun = new THREE.Group(); head.add(hair.bun);
+  add(hair.bun, G.hairShort, P.hairMat, 0, 0.01, -0.01, -0.2);
+  add(hair.bun, G.bun, P.hairMat, 0, 0.08, -0.14);
+  hair.bald = new THREE.Group(); head.add(hair.bald);   // intentionally empty
+  hair.cap = new THREE.Group(); head.add(hair.cap);     // hair is hidden under capHat below
+
+  // Optional small flower accent for a bun - a common everyday look in Kerala.
+  const flower = new THREE.Group(); head.add(flower);
+  for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; add(flower, G.flowerPetal, P.flowerMat, Math.cos(a) * 0.03, 0.1, -0.14 + Math.sin(a) * 0.03); }
+  add(flower, G.flowerPetal, P.flowerCenterMat, 0, 0.1, -0.14);
+
+  const capHat = new THREE.Group(); head.add(capHat);
+  add(capHat, G.capDome, P.capMat, 0, 0.012, -0.01);
+  add(capHat, G.capBrim, P.capMat, 0, -0.015, 0.13);
+
+  // Arms: shoulder -> sleeve/upper-arm -> elbow -> forearm/wrist -> hand (palm + thumb, not a bare
+  // stub sphere).
   function makeArm(side) {
     const shoulder = new THREE.Group(); shoulder.position.set(side * 0.29, 0.72, 0); torso.add(shoulder);
-    add(shoulder, new THREE.CapsuleGeometry(0.06, 0.2, 3, 8), shirt, 0, -0.15, 0);
+    const sleeveMesh = add(shoulder, G.upperArm, P.upperMat, 0, -0.15, 0);
     const elbow = new THREE.Group(); elbow.position.y = -0.3; shoulder.add(elbow);
-    add(elbow, new THREE.CapsuleGeometry(0.048, 0.24, 3, 8), skin, 0, -0.15, 0);
-    add(elbow, new THREE.SphereGeometry(0.05, 8, 8), skin, 0, -0.34, 0);
+    add(elbow, G.forearm, P.skinMat, 0, -0.15, 0);
+    add(elbow, G.wrist, P.skinMat, 0, -0.28, 0);
+    const hand = new THREE.Group(); hand.position.y = -0.32; elbow.add(hand);
+    add(hand, G.palm, P.skinMat, 0, -0.02, 0.006);
+    add(hand, G.thumb, P.skinMat, side * 0.046, 0.0, 0.03, 0, 0, side * -0.5);
     shoulder.rotation.z = side * 0.08;
-    return { shoulder: shoulder, elbow: elbow };
+    return { shoulder: shoulder, elbow: elbow, sleeveMesh: sleeveMesh };
   }
   const armL = makeArm(-1), armR = makeArm(1);
 
-  // Legs
+  // Legs: hip -> thigh -> knee -> calf/ankle -> foot (a heel + toe pair, not one flat slab) plus a
+  // full set of pre-built swappable shoes.
   function makeLeg(side) {
     const hip = new THREE.Group(); hip.position.set(side * 0.11, -0.05, 0); hips.add(hip);
-    add(hip, new THREE.CapsuleGeometry(0.085, 0.3, 3, 8), mundu, 0, -0.22, 0);
+    const thighMesh = add(hip, G.thigh, P.lowerMat, 0, -0.22, 0);
     const knee = new THREE.Group(); knee.position.y = -0.46; hip.add(knee);
-    add(knee, new THREE.CapsuleGeometry(0.065, 0.32, 3, 8), skin, 0, -0.22, 0);
-    const foot = add(knee, new THREE.BoxGeometry(0.11, 0.07, 0.24), sole, 0, -0.48, 0.05);
-    return { hip: hip, knee: knee, foot: foot };
+    const calfMesh = add(knee, G.calf, P.skinMat, 0, -0.22, 0);
+    add(knee, G.ankle, P.skinMat, 0, -0.42, 0.01);
+    const footMesh = add(knee, G.footBase, P.skinMat, 0, -0.47, 0.02);
+    const toeMesh = add(knee, G.footToe, P.skinMat, 0, -0.465, 0.125);
+    const shoes = {};
+    shoes.sneakers = new THREE.Group(); knee.add(shoes.sneakers);
+    add(shoes.sneakers, G.sneakerBody, P.shoesMat, 0, -0.465, 0.03);
+    add(shoes.sneakers, G.sneakerSole, P.soleMat, 0, -0.5, 0.035);
+    shoes.formal = new THREE.Group(); knee.add(shoes.formal);
+    add(shoes.formal, G.formalShoe, P.shoesMat, 0, -0.47, 0.02);
+    add(shoes.formal, G.formalToe, P.shoesMat, 0, -0.47, 0.12);
+    shoes.sandals = new THREE.Group(); knee.add(shoes.sandals);
+    add(shoes.sandals, G.sandalSole, P.soleMat, 0, -0.495, 0.03);
+    add(shoes.sandals, G.sandalStrap, P.shoesMat, 0, -0.455, 0.0, 0.4);
+    add(shoes.sandals, G.sandalStrap, P.shoesMat, 0, -0.455, 0.08, -0.3);
+    return { hip: hip, knee: knee, thighMesh: thighMesh, calfMesh: calfMesh, footMesh: footMesh, toeMesh: toeMesh, shoes: shoes };
   }
   const legL = makeLeg(-1), legR = makeLeg(1);
 
   body.scale.setScalar(1.05);
-  playerGroup.add(body);
-  playerMesh = body;
-  playerRig = { hips: hips, torso: torso, head: head, armL: armL, armR: armR, legL: legL, legR: legR, phase: 0, moveAmt: 0, facing: 0, airborne: 0 };
 
-  playerGroup.position.set(state.playerPos.x, state.playerPos.y, state.playerPos.z);
-  scene.add(playerGroup);
+  Object.assign(P, {
+    hair: hair, flower: flower, capHat: capHat, collar: collar, tunicSkirt: tunicSkirt,
+    skirtWrap: skirtWrap, goldBorder: goldBorder, angavastram: angavastram, pallu: pallu,
+    dupattaL: dupattaL, dupattaR: dupattaR, chest: chest, waistBand: waistBand
+  });
+
+  const rig = { root: root, body: body, hips: hips, torso: torso, head: head, armL: armL, armR: armR, legL: legL, legR: legR, parts: P };
+  applyAppearanceToRig(rig, appearance);
+  return rig;
 }
+
+function applySkinToRig(rig, skinHex) { rig.parts.skinMat.color.setHex(skinHex); }
+
+function applyHairToRig(rig, hairStyle, hairColorHex, flowerOn) {
+  const P = rig.parts;
+  P.hairMat.color.setHex(hairColorHex);
+  for (const k in P.hair) P.hair[k].visible = (k === hairStyle);
+  P.flower.visible = (hairStyle === 'bun' && !!flowerOn);
+  P.capHat.visible = (hairStyle === 'cap');
+}
+
+function applyOutfitToRig(rig, outfitKey) {
+  const o = OUTFITS[outfitKey] || OUTFITS.tshirt_jeans;
+  const P = rig.parts;
+  P.upperMat.color.setHex(o.upperColor);
+  P.lowerMat.color.setHex(o.lowerColor);
+
+  const bare = o.upper === 'bare';
+  P.chest.material = bare ? P.skinMat : P.upperMat;
+  P.chest.scale.y = o.upper === 'blouse' ? 0.72 : 1;
+  const longSleeve = (o.upper === 'shirt' || o.upper === 'kurta' || o.upper === 'jubba');
+  [rig.armL, rig.armR].forEach(a => { a.sleeveMesh.material = (longSleeve && !bare) ? P.upperMat : P.skinMat; });
+  P.collar.visible = (o.upper === 'shirt');
+  P.tunicSkirt.visible = (o.upper === 'kurta' || o.upper === 'jubba');
+
+  const skirtLower = (o.lower === 'mundu' || o.lower === 'mundu_kasavu' || o.lower === 'saree');
+  P.skirtWrap.visible = skirtLower;
+  P.goldBorder.visible = (o.lower === 'mundu_kasavu' || o.lower === 'saree');
+  [rig.legL, rig.legR].forEach(l => {
+    if (skirtLower) { l.thighMesh.material = P.skinMat; l.calfMesh.material = P.skinMat; }
+    else if (o.lower === 'shorts') { l.thighMesh.material = P.lowerMat; l.calfMesh.material = P.skinMat; }
+    else { l.thighMesh.material = P.lowerMat; l.calfMesh.material = P.lowerMat; }   // jeans/trousers/leggings/churidar
+  });
+
+  P.angavastram.visible = !!o.angavastram;
+  P.pallu.visible = !!o.pallu;
+  P.dupattaL.visible = P.dupattaR.visible = !!o.dupatta;
+}
+
+function applyShoesToRig(rig, shoeType) {
+  const P = rig.parts;
+  [rig.legL, rig.legR].forEach(l => {
+    const barefoot = (shoeType === 'barefoot' || !l.shoes[shoeType]);
+    l.footMesh.visible = l.toeMesh.visible = barefoot;
+    for (const k in l.shoes) l.shoes[k].visible = (k === shoeType);
+  });
+}
+
+function applyAppearanceToRig(rig, appearance) {
+  appearance = normalizeAppearance(appearance);
+  rig.appearance = appearance;
+  applySkinToRig(rig, appearance.skin);
+  applyHairToRig(rig, appearance.hairStyle, appearance.hairColor, appearance.flower);
+  applyOutfitToRig(rig, appearance.outfit);
+  applyShoesToRig(rig, appearance.shoes);
+  return rig;
+}
+
+// Apply a new look to the local player, live, and remember it for next time. Called both at spawn
+// (with the saved/default look) and from the character-creation screen while it's open, so picking a
+// swatch changes the avatar immediately.
+function applyPlayerAppearance(appearance) {
+  window.playerAppearance = normalizeAppearance(appearance);
+  saveAppearance(window.playerAppearance);
+  if (playerRig) applyAppearanceToRig(playerRig, window.playerAppearance);
+  return window.playerAppearance;
+}
+
+function buildPlayerAvatar() {
+  const appearance = loadAppearance() || defaultAppearance();
+  window.playerAppearance = appearance;
+  const rig = buildHumanRig(appearance);
+  rig.phase = 0; rig.moveAmt = 0; rig.facing = 0; rig.airborne = 0;
+  playerMesh = rig.body;
+  playerRig = rig;
+  rig.root.position.set(state.playerPos.x, state.playerPos.y, state.playerPos.z);
+  scene.add(rig.root);
+}
+
+// Explicit window.* exports for the character-creation screen and multiplayer.js (both are separate
+// <script> tags; function declarations are already global, but const/object data isn't, so it's
+// exposed here on purpose).
+window.SKIN_TONES = SKIN_TONES;
+window.HAIR_COLORS = HAIR_COLORS;
+window.HAIR_STYLE_LIST = HAIR_STYLE_LIST;
+window.OUTFITS = OUTFITS;
+window.OUTFIT_LIST = OUTFIT_LIST;
+window.SHOE_LIST = SHOE_LIST;
+window.defaultAppearance = defaultAppearance;
+window.normalizeAppearance = normalizeAppearance;
+window.loadAppearance = loadAppearance;
+window.saveAppearance = saveAppearance;
+window.buildHumanRig = buildHumanRig;
+window.applyAppearanceToRig = applyAppearanceToRig;
+window.applyPlayerAppearance = applyPlayerAppearance;
 
 function animatePlayerRig(dt, speed01, airborne) {
   const r = playerRig;
