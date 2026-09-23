@@ -274,6 +274,34 @@ body, html {
   gap: 8px;
 }
 
+/* Live X/Y/Z coordinates panel */
+.coords-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+.coord-cell {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.coord-label {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.coord-cell > span:last-child {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--primary-emerald);
+  font-variant-numeric: tabular-nums;
+}
+
 .btn-teleport {
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.08);

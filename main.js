@@ -1217,7 +1217,18 @@ function updatePlayerMovement(dt) {
   animatePlayerRig(dt, moving ? (sprint ? 1 : 0.6) * (wading ? 0.6 : 1) : 0, !state.isGrounded);
   camRig.idleTime = moving ? 0 : camRig.idleTime + dt;
 
-  document.getElementById('coords-text').innerText = `X: ${Math.round(p.x)} | Z: ${Math.round(p.z)}`;
+  updateCoordsPanel();
+}
+
+// Live X/Y/Z readout in the sidebar's "Coordinates" tab (index.html) - always reads state.playerPos,
+// which every movement path (on foot, driving, riding, the train) already keeps current, so callers
+// just need to update that first and then call this rather than juggling separate x/y/z locals.
+function updateCoordsPanel() {
+  const p = state.playerPos;
+  const ex = document.getElementById('coord-x'), ey = document.getElementById('coord-y'), ez = document.getElementById('coord-z');
+  if (ex) ex.textContent = Math.round(p.x);
+  if (ey) ey.textContent = Math.round(p.y);
+  if (ez) ez.textContent = Math.round(p.z);
 }
 
 function updateCamera(dt) {
@@ -1956,7 +1967,7 @@ function updateRiding(dt) {
   parent.position.set(vx, vy + 1.0, vz);
   state.playerPos.x = vx; state.playerPos.y = vy + 1.0; state.playerPos.z = vz;
   camRig.idleTime = 0;
-  document.getElementById('coords-text').innerText = `X: ${Math.round(vx)} | Z: ${Math.round(vz)}`;
+  updateCoordsPanel();
 }
 
 function tryEnterVehicle() {
@@ -2057,7 +2068,7 @@ function updateVehicleDriving(dt) {
       if (half !== v._paddleHalf) { v._paddleHalf = half; playPaddleSplash(); }
     }
     camRig.idleTime = 0;
-    document.getElementById('coords-text').innerText = `X: ${Math.round(v.x)} | Z: ${Math.round(v.z)}`;
+    updateCoordsPanel();
     return;
   }
 
@@ -2081,7 +2092,7 @@ function updateVehicleDriving(dt) {
   if (RIDER_VISIBLE_TYPES[v.type]) playerMesh.rotation.y = v.yaw;
   state.playerPos.x = v.x; state.playerPos.y = gy + riderY; state.playerPos.z = v.z;
   camRig.idleTime = 0;
-  document.getElementById('coords-text').innerText = `X: ${Math.round(v.x)} | Z: ${Math.round(v.z)}`;
+  updateCoordsPanel();
 }
 
 // ---------------------------------------------------------------------------
@@ -2130,7 +2141,7 @@ function updateRidingTrain(dt) {
   playerMesh.parent.position.set(wx, wy, wz);
   state.playerPos.x = wx; state.playerPos.y = wy; state.playerPos.z = wz;
   camRig.idleTime = 0;
-  document.getElementById('coords-text').innerText = `X: ${Math.round(wx)} | Z: ${Math.round(wz)}`;
+  updateCoordsPanel();
 }
 
 // E key: drive/exit a vehicle, board/exit the train, or show the info card of the closest landmark

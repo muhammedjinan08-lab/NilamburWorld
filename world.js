@@ -829,11 +829,15 @@ function buildCanolyBridge() {
     g.add(mk(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.12, 6, false), M.steelDark, 0, 0, 0));
   }
 
-  // Cable profile
+  // Cable profile - TOWER_TOP is also where the A-frame towers peak, below, so the cable actually
+  // meets the tower top instead of floating past it; TOWER_SCALE derives every other tower measurement
+  // (leg length, cross-brace heights/angle) from the same ratio so a shorter tower stays proportioned
+  // rather than just having its peak clipped.
+  const TOWER_TOP = 10, TOWER_SCALE = TOWER_TOP / 14.6;
   function cableY(x) {
     const a = Math.abs(x);
-    if (a <= 20) return 4.4 + (14.6 - 4.4) * (a / 20) * (a / 20);
-    return 14.6 - (14.6 - 3.8) * (a - 20) / 13;
+    if (a <= 20) return 4.4 + (TOWER_TOP - 4.4) * (a / 20) * (a / 20);
+    return TOWER_TOP - (TOWER_TOP - 3.8) * (a - 20) / 13;
   }
   for (const sz of [-3.5, 3.5]) {
     const pts = [];
@@ -861,17 +865,21 @@ function buildCanolyBridge() {
   }
   g.add(makeInstanced(hangGeo, M.steelDark, hM, null, false));
 
-  // Steel A-frame towers at each bank
+  // Steel A-frame towers at each bank - shorter now (TOWER_TOP/TOWER_SCALE, above), scaled down from
+  // the original 18-unit legs/14.6 peak so the cross-bracing still looks proportioned rather than just
+  // having the same brace geometry crammed under a lower cap.
+  const legH = 18 * TOWER_SCALE, legY = 6.0 * TOWER_SCALE, midBraceY = 9.0 * TOWER_SCALE, diagBraceY = 11.8 * TOWER_SCALE;
   for (const sx of [-20, 20]) {
     for (const sz of [-3.7, 3.7]) {
-      g.add(mk(new THREE.BoxGeometry(0.7, 18, 0.7), M.steel, sx, 6.0, sz));
+      g.add(mk(new THREE.BoxGeometry(0.7, legH, 0.7), M.steel, sx, legY, sz));
       g.add(mk(new THREE.BoxGeometry(1.6, 1.6, 1.6), M.concrete, sx, -0.2, sz));
     }
-    g.add(mk(new THREE.BoxGeometry(0.6, 0.7, 8.2), M.steel, sx, 14.6, 0));
-    g.add(mk(new THREE.BoxGeometry(0.5, 0.5, 7.6), M.steel, sx, 9.0, 0));
-    const bl = Math.hypot(7.4, 5.6), ba = Math.atan2(5.6, 7.4);
+    g.add(mk(new THREE.BoxGeometry(0.6, 0.7, 8.2), M.steel, sx, TOWER_TOP, 0));
+    g.add(mk(new THREE.BoxGeometry(0.5, 0.5, 7.6), M.steel, sx, midBraceY, 0));
+    const braceVSpan = 5.6 * TOWER_SCALE;   // leg spacing (7.4) is unchanged, only the vertical span shrinks
+    const bl = Math.hypot(7.4, braceVSpan), ba = Math.atan2(braceVSpan, 7.4);
     for (const sgn of [-1, 1]) {
-      const br = mk(new THREE.BoxGeometry(0.22, 0.22, bl), M.steelDark, sx, 11.8, 0);
+      const br = mk(new THREE.BoxGeometry(0.22, 0.22, bl), M.steelDark, sx, diagBraceY, 0);
       br.rotation.x = sgn * ba;
       g.add(br);
     }

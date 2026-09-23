@@ -84,11 +84,24 @@
 
   <!-- Right Sidebar: Minimap & Weather Controls -->
   <aside id="right-sidebar">
+    <!-- Live X/Y/Z coordinates - its own closable tab (uses the same minimise/remember pattern as
+         every other panel here, see multiplayer.js's initPanels()) rather than the old single-line
+         X/Z readout that used to live in the minimap header. -->
+    <div class="widget-box glass-panel collapsible" data-key="coords">
+      <div class="widget-header">
+        <h2>🧭 Coordinates</h2>
+      </div>
+      <div class="coords-grid">
+        <div class="coord-cell"><span class="coord-label">X</span><span id="coord-x">0</span></div>
+        <div class="coord-cell"><span class="coord-label">Y</span><span id="coord-y">0</span></div>
+        <div class="coord-cell"><span class="coord-label">Z</span><span id="coord-z">0</span></div>
+      </div>
+    </div>
+
     <!-- 2D Minimap -->
     <div class="widget-box glass-panel collapsible" data-key="minimap" style="padding: 12px;">
       <div class="widget-header" style="margin-bottom: 8px;">
         <h2>📍 GPS Minimap</h2>
-        <span style="font-size: 11px; color: var(--text-muted);" id="coords-text">X: 0 | Z: 0</span>
       </div>
       <div id="minimap-container">
         <canvas id="minimap-canvas"></canvas>
