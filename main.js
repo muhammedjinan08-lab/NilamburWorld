@@ -355,6 +355,7 @@ function buildWorld() {
   buildTeakMuseum();
   buildNilamburPalace();
   buildAdyanparaWaterfall();
+  buildWaterfallStream();   // joins the waterfall's plunge pool to the Chaliyar River
   buildRailwayTrack();
   buildMinorStations();
   buildNilamburTown();
@@ -1082,11 +1083,12 @@ function drawMapContent(ctx, w, h, mapX, mapZ, sc, labels) {
     ctx.fillText(text, x, y + tagH - 3);
   };
 
-  // Draw River
+  // Draw River (runs the length of the world now - see RIVER_LEN in world.js - so its ends are
+  // drawn well past any reasonable map framing rather than a fixed, visibly-terminating length)
   ctx.strokeStyle = '#00B0FF';
   ctx.lineWidth = Math.max(1.5, 14 * sc * 2);
   ctx.beginPath();
-  line(0, -320, 0, 320);
+  line(0, -950, 0, 950);
   ctx.stroke();
   tag(mapX(0), mapZ(-300) + 6, 'Chaliyar River', '#40C4FF');
 
@@ -1424,6 +1426,43 @@ const VEH_SPECS = {
   kayak: { max: 7, acc: 5, turn: 2.0, camDist: 8 }
 };
 const ENTER_RANGE = 3.5;
+// Open vehicles (no cabin hiding the driver) keep the avatar visible, seated in a pose fitting the
+// vehicle, instead of hiding it the way an enclosed car/bus/auto does.
+const RIDER_VISIBLE_TYPES = { bike: 1, kayak: 1 };
+const RIDER_SEAT_Y = { bike: 0.16 };   // seat height above ground; other land types keep the default 1.0
+
+// Pose the avatar's rig for riding a bike or a kayak (called once on entry) - animatePlayerRig, the
+// walk-cycle animator, never runs while state.driving is set, so this pose holds steady on its own.
+function setSeatedPose(type) {
+  const r = playerRig;
+  if (!r) return;
+  if (type === 'bike') {
+    r.torso.rotation.x = 0.15;
+    r.legL.hip.rotation.x = r.legR.hip.rotation.x = -0.6;
+    r.legL.knee.rotation.x = r.legR.knee.rotation.x = 1.1;
+    r.armL.shoulder.rotation.x = r.armR.shoulder.rotation.x = -0.5;
+    r.armL.elbow.rotation.x = r.armR.elbow.rotation.x = 0.3;
+  } else if (type === 'kayak') {
+    r.torso.rotation.x = 0.08;
+    r.legL.hip.rotation.x = r.legR.hip.rotation.x = -0.9;
+    r.legL.knee.rotation.x = r.legR.knee.rotation.x = 0.25;
+    r.armL.shoulder.rotation.x = r.armR.shoulder.rotation.x = -0.45;
+    r.armL.elbow.rotation.x = r.armR.elbow.rotation.x = 0.5;
+  }
+}
+
+// Undo setSeatedPose() - animatePlayerRig resumes managing legs/arms on its own once back on foot,
+// but it never touches the torso, so that has to be reset explicitly or the lean would stick.
+function clearSeatedPose() {
+  const r = playerRig;
+  if (!r) return;
+  r.torso.rotation.x = 0;
+  r.legL.hip.rotation.x = r.legR.hip.rotation.x = 0;
+  r.legL.knee.rotation.x = r.legR.knee.rotation.x = 0;
+  r.armL.shoulder.rotation.x = r.armR.shoulder.rotation.x = 0;
+  r.armL.shoulder.rotation.z = -0.08; r.armR.shoulder.rotation.z = 0.08;  // makeArm()'s fixed resting tilt
+  r.armL.elbow.rotation.x = r.armR.elbow.rotation.x = 0;
+}
 
 // Every vehicle is a solid obstacle - not just the ones with a static collider registered while
 // parked. Scripted traffic (still under updateTown's control) and vehicles parked with noCollider
@@ -1544,7 +1583,10 @@ function enterVehicle(v) {
   }
   v.occupied = true;
   state.driving = v;
-  playerMesh.parent.visible = false;
+  // Open vehicles (bike, kayak) show the rider seated on/in it; an enclosed car/bus/auto still just
+  // hides the avatar, since there's no cabin geometry to seat them inside realistically.
+  if (RIDER_VISIBLE_TYPES[v.type]) { playerMesh.parent.visible = true; setSeatedPose(v.type); }
+  else playerMesh.parent.visible = false;
   camRig._savedDist = camRig.distTarget;
   camRig.distTarget = (VEH_SPECS[v.type] || VEH_SPECS.car).camDist;
   camRig.yaw = v.yaw + Math.PI;   // snap straight in behind it - see updateCamera for the ongoing lock
@@ -1567,6 +1609,7 @@ function exitVehicle() {
   state.playerVelocity.y = 0; state.isGrounded = true;
   camRig.distTarget = camRig._savedDist || 16;
   state.driving = null;
+  clearSeatedPose();
   triggerLandmarkPopup('🚶 On foot', 'You parked the vehicle. Walk up to any vehicle and press E to drive it.');
 }
 
@@ -1601,8 +1644,19 @@ function updateVehicleDriving(dt) {
     v.g.position.set(v.x, WATER_Y + 0.16, v.z);
     v.g.rotation.y = v.yaw;
     const parent = playerMesh.parent;
-    parent.position.set(v.x, WATER_Y + 0.55, v.z);
-    state.playerPos.x = v.x; state.playerPos.y = WATER_Y + 0.55; state.playerPos.z = v.z;
+    parent.position.set(v.x, WATER_Y - 0.48, v.z);   // sit down inside the hull, not floating above it
+    playerMesh.rotation.y = v.yaw;
+    state.playerPos.x = v.x; state.playerPos.y = WATER_Y - 0.48; state.playerPos.z = v.z;
+    // Paddling animation while actually under way
+    const r = playerRig;
+    if (r && Math.abs(v.spd) > 0.25) {
+      v.paddlePhase = (v.paddlePhase || 0) + dt * (2.4 + Math.abs(v.spd) * 0.35);
+      const sw = Math.sin(v.paddlePhase);
+      r.armL.shoulder.rotation.z = -0.08 + sw * 0.3;
+      r.armR.shoulder.rotation.z = 0.08 - sw * 0.3;
+      r.armL.shoulder.rotation.x = -0.45 + sw * 0.15;
+      r.armR.shoulder.rotation.x = -0.45 - sw * 0.15;
+    }
     camRig.idleTime = 0;
     document.getElementById('coords-text').innerText = `X: ${Math.round(v.x)} | Z: ${Math.round(v.z)}`;
     return;
@@ -1622,9 +1676,11 @@ function updateVehicleDriving(dt) {
   v.g.position.set(v.x, gy + ROAD_Y, v.z);
   v.g.rotation.y = v.yaw;
 
+  const riderY = RIDER_SEAT_Y[v.type] !== undefined ? RIDER_SEAT_Y[v.type] : 1.0;
   const parent = playerMesh.parent;
-  parent.position.set(v.x, gy + 1.0, v.z);
-  state.playerPos.x = v.x; state.playerPos.y = gy + 1.0; state.playerPos.z = v.z;
+  parent.position.set(v.x, gy + riderY, v.z);
+  if (RIDER_VISIBLE_TYPES[v.type]) playerMesh.rotation.y = v.yaw;
+  state.playerPos.x = v.x; state.playerPos.y = gy + riderY; state.playerPos.z = v.z;
   camRig.idleTime = 0;
   document.getElementById('coords-text').innerText = `X: ${Math.round(v.x)} | Z: ${Math.round(v.z)}`;
 }

@@ -61,6 +61,17 @@ const FLATS = [
   { key: 'railway', r: 0, b: 0 }
 ];
 
+// Stream connecting Adyanpara Waterfall's plunge pool to the Chaliyar River (a tributary) - see the
+// stream-carving term in heightAt below and buildWaterfallStream for its visible water surface.
+// LANDMARKS isn't defined yet when this file first runs (it lives in main.js, loaded after world.js)
+// so the plunge pool's position is read lazily here rather than cached at module-init time.
+const STREAM_END = { x: -12, z: -102 };   // where the stream meets the river's west bank (well inside its actual wet channel - the bank only clears above water around ax~15)
+function streamDist(x, z) {
+  const wf = LANDMARKS.waterfall.pos, az = wf.z + 18;   // the plunge pool centre (matches heightAt's own basin)
+  const cx = clamp(x, wf.x, STREAM_END.x);              // the stream runs due east at that same z
+  return Math.hypot(x - cx, z - az);
+}
+
 function heightAt(x, z) {
   let h = rawHeight(x, z);
   // Railway embankment / cutting
@@ -87,6 +98,19 @@ function heightAt(x, z) {
     const px = LANDMARKS.waterfall.pos.x, pz = LANDMARKS.waterfall.pos.z + 18;
     const dd = Math.sqrt((x - px) * (x - px) + (z - pz) * (z - pz));
     h -= 1.7 * (1 - smoothstep(4.5, 10.5, dd));
+  }
+  // Stream + pool water level: the waterfall sits on an elevated plateau here (LM_H.waterfall is
+  // several metres above the valley floor), so blend straight to a fixed low target height rather
+  // than just subtracting a fixed amount - that way it reliably clears the water threshold
+  // (isRiverWater) regardless of how high the surrounding plateau is, joining the plunge pool to the
+  // Chaliyar River as a real tributary (see buildWaterfallStream for its visible surface). The main
+  // river itself has no visible end - see RIVER_LEN in buildChaliyarRiver; its bed only ever depends
+  // on x, not z, so it was already effectively endless underneath.
+  {
+    const wf = LANDMARKS.waterfall.pos, poolX = wf.x, poolZ = wf.z + 18;
+    const poolDist = Math.hypot(x - poolX, z - poolZ);
+    const w = Math.max(1 - smoothstep(9.0, 12.5, poolDist), 1 - smoothstep(2.2, 6.5, streamDist(x, z)));
+    if (w > 0) h = lerp(h, WATER_Y - 0.5, w);
   }
   // Town plateau
   {
@@ -331,8 +355,9 @@ function buildTerrain() {
 }
 
 // ---------- River ----------
+const RIVER_LEN = 1900;   // long enough to run to the mountain rim/fog on both ends - no visible end within the playable world
 function buildChaliyarRiver() {
-  const geo = new THREE.PlaneGeometry(56, 640);
+  const geo = new THREE.PlaneGeometry(56, RIVER_LEN);
   geo.rotateX(-Math.PI / 2);
   const opts = {
     textureWidth: 512, textureHeight: 512,
@@ -349,6 +374,18 @@ function buildChaliyarRiver() {
   waterMesh.material.uniforms.size.value = 0.9;
   waterMesh.position.set(0, WATER_Y, 0);
   scene.add(waterMesh);
+}
+
+// A visible water strip along the carved stream channel (see heightAt's streamDist term), joining
+// Adyanpara Waterfall's plunge pool to the Chaliyar River - the two water features read as connected
+// instead of the pool being an isolated pond.
+function buildWaterfallStream() {
+  const wf = LANDMARKS.waterfall.pos, az = wf.z + 18;
+  const len = STREAM_END.x - wf.x;
+  const mat = new THREE.MeshStandardMaterial({ color: 0x1c4a3c, roughness: 0.12, metalness: 0.15, transparent: true, opacity: 0.92 });
+  const strip = mk(new THREE.PlaneGeometry(len, 5), mat, wf.x + len / 2, WATER_Y, az, false, true);
+  strip.rotation.x = -Math.PI / 2;
+  scene.add(strip);
 }
 
 // True wherever the carved-out river bed actually dips below the water surface - this follows the
@@ -1136,6 +1173,22 @@ function buildAdyanparaWaterfall() {
   const lip = mk(new THREE.BoxGeometry(11, 0.5, 5), new THREE.MeshStandardMaterial({ color: 0x6a8a90, roughness: 0.2, metalness: 0.2 }), 0, H - 3.5, 8, false, true);
   lip.rotation.x = 0.25;
   g.add(lip);
+
+  // Spring source at the crest, just behind the lip - the fall now visibly begins at a small
+  // bubbling pool tucked among rocks, rather than the water just appearing at the edge.
+  {
+    const springMat = new THREE.MeshStandardMaterial({ color: 0x3a8a86, roughness: 0.05, metalness: 0.1, normalMap: TEX.poolN, normalScale: new THREE.Vector2(0.5, 0.5), transparent: true, opacity: 0.9 });
+    const spring = mk(new THREE.CircleGeometry(3.2, 24), springMat, 0, H - 3.35, 5.5, false, true);
+    spring.rotation.x = -Math.PI / 2;
+    g.add(spring);
+    const sr = makeRng(41);
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2, rr = 2.7 + sr() * 0.8;
+      const rk = mk(makeRockGeometry(i * 7 + 3), M.rock, Math.cos(a) * rr, H - 3.2, 5.5 + Math.sin(a) * rr, false, true);
+      rk.scale.setScalar(0.35 + sr() * 0.3);
+      g.add(rk);
+    }
+  }
 
   // Plunge pool
   const poolMat = new THREE.MeshStandardMaterial({ color: 0x2c6a66, roughness: 0.06, metalness: 0.1, normalMap: TEX.poolN, normalScale: new THREE.Vector2(0.6, 0.6), transparent: true, opacity: 0.88, envMapIntensity: 1.6 });

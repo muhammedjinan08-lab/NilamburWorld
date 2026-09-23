@@ -466,21 +466,40 @@ function vehicleParts(type, hex) {
       for (const sx of [-1, 1]) for (const sz of (hex === 0xc8201e ? [-2.2, 2.2] : [-1.6, 1.6])) wheel(sx * 1.0, sz, 0.42, 0.28);
       break;
     case 'kayak': {
-      // Slender hull (a stretched, flattened capsule so it tapers at bow and stern), a small
-      // cockpit deck and a paddle laid across it. Local +z is forward, matching every other vehicle.
-      const hull = new THREE.CapsuleGeometry(0.34, 1.75, 4, 10);
-      hull.scale(1, 0.6, 1);
-      add('paint', hull, 0, 0.24, 0, hex, Math.PI / 2, 0, 0);
-      add('wood', B(0.34, 0.05, 0.55), 0, 0.37, 0, 0x6a4a28);
-      add('wood', B(0.045, 0.045, 2.0), 0, 0.45, 0, 0x8a5a2a);
-      add('paint', B(0.16, 0.02, 0.42), 0, 0.45, 0.9, 0xe8e8e0);
-      add('paint', B(0.16, 0.02, 0.42), 0, 0.45, -0.9, 0xe8e8e0);
+      // Sit-on-top kayak: a tapered 4-segment hull (pointed bow/stern, wide midsection - a
+      // flattened, chained-cylinder profile instead of a single capsule, for a real tapered
+      // silhouette), a moulded seat well with a backrest strap, side grab handles, bow/stern
+      // bungee lines, and a two-bladed paddle laid diagonally across the cockpit. Local +z is
+      // forward (the bow), matching every other vehicle. `hex` colours the bow/cockpit half; the
+      // stern is a fixed contrasting yellow, echoing a typical two-tone recreational sit-on-top.
+      const sternHex = 0xf2c200;
+      const hullSeg = (rTop, rBot, len, z, c) => {
+        const hg = new THREE.CylinderGeometry(rTop, rBot, len, 10);
+        hg.scale(1, 1, 0.56);   // flattens what becomes vertical height once rotated onto its side below
+        add('paint', hg, 0, 0.2, z, c, Math.PI / 2, 0, 0);
+      };
+      hullSeg(0.04, 0.30, 0.4, 1.15, hex);          // bow taper
+      hullSeg(0.30, 0.33, 0.8, 0.55, hex);          // forward hull / cockpit
+      hullSeg(0.33, 0.28, 0.8, -0.25, sternHex);    // aft hull
+      hullSeg(0.28, 0.04, 0.4, -0.85, sternHex);    // stern taper
+      // Moulded seat well and backrest strap
+      add('paint', B(0.4, 0.05, 0.7), 0, 0.34, 0.3, 0xe0703a);
+      add('rubber', B(0.36, 0.14, 0.06), 0, 0.42, -0.05, 0x1a1a1a);
+      // Side grab handles
+      for (const sx of [-1, 1]) add('rubber', B(0.05, 0.05, 0.28), sx * 0.31, 0.24, 0.7, 0x151515);
+      // Bow and stern bungee tie-downs
+      add('rubber', B(0.03, 0.03, 0.55), 0, 0.36, 0.95, 0x1a1a1a, 0.25, 0, 0);
+      add('rubber', B(0.03, 0.03, 0.5), 0, 0.36, -0.85, 0x1a1a1a, 0.25, 0, 0);
+      // Paddle laid diagonally across the cockpit: dark aluminium shaft, red blades
+      add('metal', B(0.035, 0.035, 1.9), 0.05, 0.4, 0.2, 0x3a3a3a, 0, 0.35, 0);
+      add('paint', B(0.16, 0.02, 0.42), 0.376, 0.4, 1.092, 0xe53935, 0, 0.35, 0);
+      add('paint', B(0.16, 0.02, 0.42), -0.276, 0.4, -0.692, 0xe53935, 0, 0.35, 0);
       break;
     }
   }
   return P;
 }
-const VEH_LEN = { car: 4.0, auto: 2.6, bus: 10.4, bike: 1.7, van: 5.0, kayak: 2.0 };
+const VEH_LEN = { car: 4.0, auto: 2.6, bus: 10.4, bike: 1.7, van: 5.0, kayak: 2.4 };
 
 function placeVehicle(type, hex, x, z, yaw, noCollider) {
   const wx = x + OX;
