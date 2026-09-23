@@ -88,6 +88,7 @@
       </div>
       <div id="minimap-container">
         <canvas id="minimap-canvas"></canvas>
+        <button type="button" id="btn-maximize-map" class="map-expand-btn" title="View full world map">⛶</button>
       </div>
     </div>
 
@@ -183,6 +184,32 @@
         <button class="tab-btn" data-file="project.godot">project.godot</button>
       </div>
       <div class="code-viewer" id="code-viewer-content">Loading GDScript content...</div>
+    </div>
+  </div>
+
+  <!-- Modal: Full World Map -->
+  <div class="modal-overlay" id="map-modal">
+    <div class="modal-box glass-panel map-modal-box">
+      <div class="modal-header">
+        <div class="map-modal-title">
+          <h2>🗺️ Nilambur World — Full Map</h2>
+          <span id="map-discovered-count" class="map-discovered-count"></span>
+        </div>
+        <button class="btn-close" id="btn-close-map">&times;</button>
+      </div>
+      <div id="map-canvas-wrap">
+        <canvas id="map-canvas-full"></canvas>
+      </div>
+      <div class="map-legend">
+        <span><i class="map-dot" style="background:#FFB300"></i> Discovered landmark</span>
+        <span><i class="map-dot" style="background:#81C784"></i> Undiscovered landmark</span>
+        <span><i class="map-dot sq" style="background:#B0BEC5"></i> Train station</span>
+        <span><i class="map-dot sq" style="background:#FFD54F"></i> Train at station (boardable)</span>
+        <span><i class="map-dot" style="background:#E53935"></i> Train (moving)</span>
+        <span><i class="map-dot" style="background:#40C4FF"></i> Other explorer</span>
+        <span><i class="map-dot" style="background:#FFD54F"></i> Friend</span>
+        <span><i class="map-dot" style="background:#00E676;border:2px solid #fff"></i> You</span>
+      </div>
     </div>
   </div>
 

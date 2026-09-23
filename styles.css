@@ -322,6 +322,27 @@ body, html {
   background: #06140c;
 }
 
+.map-expand-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.map-expand-btn:hover { background: rgba(0, 230, 118, 0.35); border-color: var(--primary-emerald); }
+
 /* Weather & Environment Slider */
 .slider-group {
   margin-top: 8px;
@@ -497,6 +518,32 @@ body, html {
   font-weight: 700;
   border-color: var(--primary-emerald);
 }
+
+/* Full World Map Modal */
+.map-modal-box { width: 1040px; max-width: 94vw; }
+.map-modal-title { display: flex; flex-direction: column; gap: 2px; }
+.map-modal-title h2 { margin: 0; }
+.map-discovered-count { font-size: 11px; color: var(--text-muted); font-weight: 500; text-transform: none; letter-spacing: normal; }
+#map-canvas-wrap {
+  display: flex;
+  justify-content: center;
+  background: #06140c;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 230, 118, 0.2);
+  overflow: hidden;
+}
+#map-canvas-full { width: 100%; height: auto; display: block; }
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.map-legend span { display: flex; align-items: center; gap: 6px; }
+.map-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex: none; }
+.map-dot.sq { border-radius: 2px; }
 
 /* Chatbox Widget */
 #chat-box {

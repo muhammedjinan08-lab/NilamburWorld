@@ -361,14 +361,18 @@
     last.x = p.x; last.z = p.z; sendTimer = 0;
   };
 
-  // Other explorers on the minimap (friends in gold, others in blue)
-  NW.drawMinimap = function (ctx, mapX, mapZ) {
+  // Other explorers on the minimap (friends in gold, others in blue). `opts` carries the
+  // caller's actual canvas size (this is shared between the small GPS widget and the
+  // maximized full map, which are different sizes) and an optional name-tag drawer.
+  NW.drawMinimap = function (ctx, mapX, mapZ, opts) {
+    const w = (opts && opts.w) || 280, h = (opts && opts.h) || 200;
     NW.remote.forEach(r => {
       const x = mapX(r.target.x), z = mapZ(r.target.z);
-      if (x < 0 || z < 0 || x > 280 || z > 200) return;
+      if (x < 0 || z < 0 || x > w || z > h) return;
       ctx.fillStyle = r.friend ? '#FFD54F' : '#40C4FF';
       ctx.beginPath(); ctx.arc(x, z, 4, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+      if (opts && opts.tag) opts.tag(x, z + 5, r.name, r.friend ? '#FFD54F' : '#40C4FF');
     });
   };
 

@@ -912,36 +912,73 @@ function completeQuest(questId) {
   }
 }
 
-// --- Minimap Canvas Renderer ---
-let minimapCtx;
+// --- Minimap / Full-World-Map Canvas Renderer ---
+// The always-on GPS widget and the maximized full map share one drawing routine
+// (drawMapContent); only their canvas size and world->canvas mapping differ - the minimap
+// follows the player at a fixed 600m span, the full map frames the whole world at once.
+let minimapCtx, fullMapCtx;
+let mapModalOpen = false;
+
 function initMinimap() {
   const canvas = document.getElementById('minimap-canvas');
   canvas.width = 280;
   canvas.height = 200;
   minimapCtx = canvas.getContext('2d');
+
+  const full = document.getElementById('map-canvas-full');
+  if (full) {
+    full.width = 1000;
+    full.height = 730;
+    fullMapCtx = full.getContext('2d');
+  }
 }
 
-function updateMinimap() {
-  if (!minimapCtx) return;
-  const ctx = minimapCtx;
-  const w = 280;
-  const h = 200;
+// World-space rectangle that contains every landmark, station and the river/railway, with a
+// little padding. This is what the maximized map frames.
+function computeFullMapBox() {
+  let minX = -70, maxX = 70, minZ = -340, maxZ = 340; // river + spawn area, always included
+  for (const key in LANDMARKS) {
+    const lm = LANDMARKS[key], r = lm.radius || 20;
+    minX = Math.min(minX, lm.pos.x - r); maxX = Math.max(maxX, lm.pos.x + r);
+    minZ = Math.min(minZ, lm.pos.z - r); maxZ = Math.max(maxZ, lm.pos.z + r);
+  }
+  if (typeof STATIONS !== 'undefined') {
+    minX = Math.min(minX, RAIL_X - 20); maxX = Math.max(maxX, RAIL_X + 20);
+    STATIONS.forEach(st => { minZ = Math.min(minZ, st.z - 20); maxZ = Math.max(maxZ, st.z + 20); });
+  }
+  const padX = (maxX - minX) * 0.06, padZ = (maxZ - minZ) * 0.06;
+  return { minX: minX - padX, maxX: maxX + padX, minZ: minZ - padZ, maxZ: maxZ + padZ };
+}
 
+// Draws the river, roads, railway, landmarks, stations, train, other players and the local
+// player into any canvas context, given its own world->canvas mapping. When `labels` is set,
+// each marker gets a small name tag underneath it so it's clear what's being pointed at.
+function drawMapContent(ctx, w, h, mapX, mapZ, sc, labels) {
   ctx.fillStyle = '#0a1d12';
   ctx.fillRect(0, 0, w, h);
 
-  // Player-centred map: 600 m across (same scale on both axes)
-  const psx = state.playerPos.x, psz = state.playerPos.z, sc = w / 600;
-  const mapX = (x) => (x - psx) * sc + w / 2;
-  const mapZ = (z) => (z - psz) * sc + h / 2;
   const line = (x1, z1, x2, z2) => { ctx.moveTo(mapX(x1), mapZ(z1)); ctx.lineTo(mapX(x2), mapZ(z2)); };
+  // Small canvas (the GPS widget) gets a tighter tag so several close-together landmarks -
+  // the forest cluster especially - stay legible instead of piling into one blob of text.
+  const fontPx = w < 400 ? 8 : 11, tagH = w < 400 ? 10 : 13;
+  const tag = (x, y, text, color) => {
+    if (!labels || !text) return;
+    ctx.font = fontPx + 'px Segoe UI, sans-serif';
+    ctx.textAlign = 'center';
+    const tw = ctx.measureText(text).width + 6;
+    ctx.fillStyle = 'rgba(0,0,0,0.62)';
+    ctx.fillRect(x - tw / 2, y, tw, tagH);
+    ctx.fillStyle = color || '#fff';
+    ctx.fillText(text, x, y + tagH - 3);
+  };
 
   // Draw River
   ctx.strokeStyle = '#00B0FF';
-  ctx.lineWidth = 14 * sc * 2;
+  ctx.lineWidth = Math.max(1.5, 14 * sc * 2);
   ctx.beginPath();
   line(0, -320, 0, 320);
   ctx.stroke();
+  tag(mapX(0), mapZ(-300) + 6, 'Chaliyar River', '#40C4FF');
 
   // Town streets: ring road plus main street, cross road and west lane
   {
@@ -964,37 +1001,46 @@ function updateMinimap() {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // Draw Landmark Markers (those off the map are pinned to its edge)
+  // Draw Landmark Markers (those off the map are pinned to its edge - skip their label there,
+  // there's no room to place text meaningfully once a marker has been clamped to the border)
   for (const key in LANDMARKS) {
     const lm = LANDMARKS[key];
     const raw = { x: mapX(lm.pos.x), z: mapZ(lm.pos.z) };
     const off = raw.x < 6 || raw.x > w - 6 || raw.z < 6 || raw.z > h - 6;
     const lx = Math.min(w - 6, Math.max(6, raw.x)), lz = Math.min(h - 6, Math.max(6, raw.z));
+    const discovered = state.discoveredLocations.has(key);
 
     ctx.globalAlpha = off ? 0.55 : 1;
-    ctx.fillStyle = state.discoveredLocations.has(key) ? '#FFB300' : '#81C784';
+    ctx.fillStyle = discovered ? '#FFB300' : '#81C784';
     ctx.beginPath();
     ctx.arc(lx, lz, off ? 3 : 5, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
+    // Labelled above the marker (stations/train are labelled below theirs) so landmarks that
+    // sit close to the railway - several do - don't get their name tags overlapping.
+    if (!off) tag(lx, lz - 18, lm.name, discovered ? '#FFD54F' : '#A5D6A7');
   }
 
   // Draw the 6 train stations and the train itself
   if (typeof STATIONS !== 'undefined') {
     STATIONS.forEach((st, i) => {
       const sx = mapX(RAIL_X), sz = mapZ(st.z);
-      ctx.fillStyle = TRAIN_STATE.state === 'dwell' && TRAIN_STATE.i === i ? '#FFD54F' : '#B0BEC5';
+      const atStop = TRAIN_STATE.state === 'dwell' && TRAIN_STATE.i === i;
+      ctx.fillStyle = atStop ? '#FFD54F' : '#B0BEC5';
       ctx.fillRect(sx - 3, sz - 3, 6, 6);
+      tag(sx, sz + 5, st.name, atStop ? '#FFD54F' : '#CFD8DC');
     });
     if (ANIM.train) {
+      const tx = mapX(RAIL_X), tz = mapZ(ANIM.train.position.z);
       ctx.fillStyle = '#E53935';
       ctx.beginPath();
-      ctx.arc(mapX(RAIL_X), mapZ(ANIM.train.position.z), 4, 0, Math.PI * 2);
+      ctx.arc(tx, tz, 4, 0, Math.PI * 2);
       ctx.fill();
+      tag(tx, tz - 16, 'Train', '#FF8A80');
     }
   }
 
-  if (window.NW && NW.drawMinimap) NW.drawMinimap(ctx, mapX, mapZ);
+  if (window.NW && NW.drawMinimap) NW.drawMinimap(ctx, mapX, mapZ, { w, h, tag });
 
   // Draw Player Position Dot
   const px = mapX(state.playerPos.x);
@@ -1015,6 +1061,40 @@ function updateMinimap() {
     ctx.lineTo(px + Math.sin(f) * 12, pz + Math.cos(f) * 12);
     ctx.stroke();
   }
+  tag(px, pz + 8, 'You', '#69F0AE');
+}
+
+function updateMinimap() {
+  if (minimapCtx) {
+    const w = 280, h = 200;
+    const psx = state.playerPos.x, psz = state.playerPos.z, sc = w / 600;
+    drawMapContent(minimapCtx, w, h, (x) => (x - psx) * sc + w / 2, (z) => (z - psz) * sc + h / 2, sc, true);
+  }
+  if (mapModalOpen) updateFullMap();
+}
+
+function updateFullMap() {
+  if (!fullMapCtx) return;
+  const w = fullMapCtx.canvas.width, h = fullMapCtx.canvas.height;
+  const box = computeFullMapBox();
+  const boxW = box.maxX - box.minX, boxH = box.maxZ - box.minZ;
+  const sc = Math.min(w / boxW, h / boxH);
+  const cx = (box.minX + box.maxX) / 2, cz = (box.minZ + box.maxZ) / 2;
+  drawMapContent(fullMapCtx, w, h, (x) => (x - cx) * sc + w / 2, (z) => (z - cz) * sc + h / 2, sc, true);
+
+  const count = document.getElementById('map-discovered-count');
+  if (count) count.innerText = `${state.discoveredLocations.size} / ${Object.keys(LANDMARKS).length} landmarks discovered`;
+}
+
+function openFullMap() {
+  mapModalOpen = true;
+  document.getElementById('map-modal').classList.add('open');
+  updateFullMap();
+}
+
+function closeFullMap() {
+  mapModalOpen = false;
+  document.getElementById('map-modal').classList.remove('open');
 }
 
 // --- Weather & Environment System ---
@@ -1127,6 +1207,7 @@ function setupEventListeners() {
   const typing = (e) => e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
   window.addEventListener('keydown', (e) => {
     if (typing(e)) return;
+    if (mapModalOpen) { if (e.code === 'Escape') closeFullMap(); return; }
     keyState[e.code] = true;
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     if (e.code === 'KeyE' && !e.repeat) interactNearest();
@@ -1208,6 +1289,13 @@ function setupEventListeners() {
       loadGodotFile(btn.dataset.file);
     });
   });
+
+  // Full World Map Modal
+  const mapModal = document.getElementById('map-modal');
+  const btnMaxMap = document.getElementById('btn-maximize-map');
+  if (btnMaxMap) btnMaxMap.addEventListener('click', openFullMap);
+  document.getElementById('btn-close-map').addEventListener('click', closeFullMap);
+  mapModal.addEventListener('click', (e) => { if (e.target === mapModal) closeFullMap(); });
 
   // Initial time display
   document.getElementById('time-display').innerText = formatTime(state.timeOfDay);
