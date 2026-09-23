@@ -144,7 +144,7 @@
     if (!url) { setStatus('offline (no server)'); addMsg('lobby', '', 'No game server is published for this site yet, so chat and friends are offline. Run "node server.js" (see README) to play with others.', { sys: true }); return; }
     setStatus('connecting…', 'connecting');
     try { ws = new WebSocket(url); } catch (e) { scheduleRetry(); return; }
-    ws.onopen = () => { retry = 0; send({ t: 'login', name: creds.name, token: creds.token }); };
+    ws.onopen = () => { retry = 0; send({ t: 'login', name: creds.name, token: creds.token, appearance: window.playerAppearance || null }); };
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } handle(m); };
     ws.onclose = () => {
       const was = NW.connected;
@@ -217,6 +217,7 @@
         } else toast(m.text, m.kind === 'warn' ? 'warn' : '');
         break;
       case 'players': updateRemote(m.list); break;
+      case 'appearances': (m.list || []).forEach(a => updateRemoteAppearance(a.n, a.ap)); break;
       case 'vehicles': updateRemoteVehicles(m.list); break;
       case 'veh_denied':
         // Raced with someone else for the same vehicle and lost - back out of it locally too.
@@ -278,9 +279,11 @@
   }
 
   // ------------------------------------------------------------------ remote avatars
-  const avatarMats = {};
-  function mat(c, r) { const k = c + '_' + r; return avatarMats[k] || (avatarMats[k] = new THREE.MeshStandardMaterial({ color: c, roughness: r })); }
-  function hashHue(s) { let h = 7; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
+  // Every remote explorer uses the same humanized rig as the local player (buildHumanRig() in
+  // main.js) so appearance customization (skin/hair/outfit/shoes) looks identical for everyone.
+  // NW.remoteAppearance remembers the last-known appearance per name so an avatar can be created (or
+  // re-skinned) correctly whichever order the 'players' and 'appearances' messages arrive in.
+  NW.remoteAppearance = new Map();
 
   function labelSprite(text, friend) {
     const c = document.createElement('canvas'); c.width = 256; c.height = 64;
@@ -292,28 +295,12 @@
     g.fillText((friend ? '★ ' : '') + text, 128, 33);
     const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-    sp.scale.set(2.6, 0.65, 1); sp.position.y = 2.55; sp.renderOrder = 10;
+    sp.scale.set(2.6, 0.65, 1); sp.position.y = 2.6; sp.renderOrder = 10;
     return sp;
   }
 
-  function makeAvatar(name) {
-    const h = hashHue(name);
-    const shirts = [0xd33a3a, 0x2a58d8, 0xe0a020, 0x8a3ab0, 0x1c8a8a, 0xe8e0c0, 0xf08a8a, 0x3a9a4a];
-    const skins = [0xb07a50, 0x9a6a44, 0xc89060, 0x8a5a38];
-    const root = new THREE.Group(), body = new THREE.Group(); root.add(body);
-    const part = (geo, m, x, y, z, parent) => { const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.castShadow = true; (parent || body).add(me); return me; };
-    const shirt = mat(shirts[h % shirts.length], 0.9), skin = mat(skins[(h >> 4) % skins.length], 0.65), low = mat((h >> 8) % 2 ? 0xf0ece0 : 0x2a2f45, 0.95);
-    part(new THREE.CapsuleGeometry(0.22, 0.4, 4, 10), shirt, 0, 1.3, 0);
-    part(new THREE.SphereGeometry(0.16, 12, 10), skin, 0, 1.86, 0);
-    part(new THREE.SphereGeometry(0.165, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.55), mat(0x17110d, 0.6), 0, 1.89, -0.01);
-    const legs = [], arms = [];
-    for (const sx of [-1, 1]) {
-      const lg = new THREE.Group(); lg.position.set(sx * 0.11, 0.95, 0); body.add(lg);
-      part(new THREE.CylinderGeometry(0.1, 0.085, 0.9, 8), low, 0, -0.45, 0, lg); legs.push(lg);
-      const ar = new THREE.Group(); ar.position.set(sx * 0.3, 1.5, 0); body.add(ar);
-      part(new THREE.CylinderGeometry(0.06, 0.055, 0.6, 8), skin, 0, -0.28, 0, ar); arms.push(ar);
-    }
-    return { root: root, body: body, legs: legs, arms: arms };
+  function makeAvatar(name, appearance) {
+    return window.buildHumanRig(appearance);
   }
 
   function updateRemote(list) {
@@ -322,7 +309,7 @@
       seen.add(p.n);
       let r = NW.remote.get(p.n);
       if (!r) {
-        const av = makeAvatar(p.n);
+        const av = makeAvatar(p.n, NW.remoteAppearance.get(p.n));
         r = { name: p.n, av: av, label: null, friend: null, target: { x: p.x, y: p.y, z: p.z, r: p.r }, mv: 0, phase: 0 };
         av.root.position.set(p.x, p.y, p.z);
         scene.add(av.root);
@@ -341,11 +328,21 @@
   function removeRemote(n) {
     const r = NW.remote.get(n); if (!r) return;
     scene.remove(r.av.root);
-    r.av.root.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+    // The rig's geometry is shared across every avatar (see getRigGeo() in main.js) - only dispose
+    // materials, which are built fresh per rig, never the shared geometry buffers.
+    r.av.root.traverse(o => { if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); } });
     if (r.label) { r.label.material.map.dispose(); r.label.material.dispose(); }
     NW.remote.delete(n); renderSocial();
   }
   function clearRemote() { Array.from(NW.remote.keys()).forEach(removeRemote); }
+
+  // Applies a (possibly just-arrived) appearance to whichever remote avatar has this name, and
+  // remembers it so an avatar built later (or rebuilt after a reconnect) starts out correct.
+  function updateRemoteAppearance(name, appearance) {
+    NW.remoteAppearance.set(name, appearance);
+    const r = NW.remote.get(name);
+    if (r) window.applyAppearanceToRig(r.av, appearance);
+  }
 
   // ------------------------------------------------------------------ synced vehicles
   // A vehicle's index into the local VEHICLES array (world.js/town.js build it identically, in a
@@ -405,9 +402,11 @@
       let d = r.target.r - r.av.body.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
       r.av.body.rotation.y += d * Math.min(1, dt * 10);
       r.phase += dt * (r.mv ? 9 : 0);
-      const sw = r.mv ? Math.sin(r.phase) * 0.7 : 0;
-      r.av.legs[0].rotation.x = sw; r.av.legs[1].rotation.x = -sw;
-      r.av.arms[0].rotation.x = -sw * 0.8; r.av.arms[1].rotation.x = sw * 0.8;
+      const sw = r.mv ? Math.sin(r.phase) * 0.6 : 0;
+      const kb = r.mv ? Math.max(0, -Math.cos(r.phase)) * 0.7 : 0, kb2 = r.mv ? Math.max(0, Math.cos(r.phase)) * 0.7 : 0;
+      r.av.legL.hip.rotation.x = sw; r.av.legR.hip.rotation.x = -sw;
+      r.av.legL.knee.rotation.x = kb; r.av.legR.knee.rotation.x = kb2;
+      r.av.armL.shoulder.rotation.x = -sw * 0.8; r.av.armR.shoulder.rotation.x = sw * 0.8;
     });
     if (!NW.connected || typeof playerMesh === 'undefined' || !playerMesh) return;
 
@@ -449,10 +448,71 @@
     });
   };
 
+  // ------------------------------------------------------------------ character creation
+  // The character-creation screen shares the name modal with the online/offline choice. `draft` is
+  // the appearance being edited; every swatch/option click applies it live (via main.js's
+  // applyPlayerAppearance, which re-skins the rig immediately and saves to localStorage) and, once
+  // connected, relays it to everyone else the same way vehicle state is relayed (a small message the
+  // server rebroadcasts - see the 'appearance'/'appearances' handling below and in server.js).
+  let draft = null, charUIReady = false, refreshCharUI = function () {};
+  function ensureDraft() {
+    if (!draft) draft = Object.assign({}, (window.playerAppearance || (typeof loadAppearance === 'function' && loadAppearance()) || (typeof defaultAppearance === 'function' ? defaultAppearance() : {})));
+    return draft;
+  }
+  function setAppearance(partial) {
+    const d = Object.assign(ensureDraft(), partial);
+    draft = (typeof applyPlayerAppearance === 'function') ? applyPlayerAppearance(d) : d;   // live preview + persists
+    if (NW.connected) send({ t: 'appearance', appearance: draft });
+    refreshCharUI();
+  }
+  function renderCharacterOptions() {
+    if (charUIReady) { refreshCharUI(); return; }
+    charUIReady = true;
+    const skinBox = $('skin-swatches'), hairStyleBox = $('hair-style-options'), hairColorBox = $('hair-swatches'),
+      hairColorSection = $('hair-color-section'), flowerSection = $('flower-section'), flowerCheck = $('flower-check'),
+      outfitBox = $('outfit-options'), shoeBox = $('shoe-options');
+    const hex6 = (h) => '#' + (h >>> 0).toString(16).padStart(6, '0').slice(-6);
+    function swatchBtn(hexVal, active, onClick) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'swatch-btn' + (active ? ' active' : ''); b.style.background = hex6(hexVal);
+      b.addEventListener('click', onClick);
+      return b;
+    }
+    function optionBtn(label, active, onClick) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'option-btn' + (active ? ' active' : ''); b.textContent = label;
+      b.addEventListener('click', onClick);
+      return b;
+    }
+    refreshCharUI = function () {
+      const d = ensureDraft();
+      skinBox.textContent = '';
+      (window.SKIN_TONES || []).forEach(hexVal => skinBox.appendChild(swatchBtn(hexVal, hexVal === d.skin, () => setAppearance({ skin: hexVal }))));
+
+      hairStyleBox.textContent = '';
+      (window.HAIR_STYLE_LIST || []).forEach(([key, label]) => hairStyleBox.appendChild(optionBtn(label, key === d.hairStyle, () => setAppearance({ hairStyle: key }))));
+
+      hairColorBox.textContent = '';
+      (window.HAIR_COLORS || []).forEach(hexVal => hairColorBox.appendChild(swatchBtn(hexVal, hexVal === d.hairColor, () => setAppearance({ hairColor: hexVal }))));
+      hairColorSection.style.display = (d.hairStyle === 'bald' || d.hairStyle === 'cap') ? 'none' : '';
+      flowerSection.style.display = (d.hairStyle === 'bun') ? '' : 'none';
+      flowerCheck.checked = !!d.flower;
+
+      outfitBox.textContent = '';
+      (window.OUTFIT_LIST || []).forEach(([key, label]) => outfitBox.appendChild(optionBtn(label, key === d.outfit, () => setAppearance({ outfit: key }))));
+
+      shoeBox.textContent = '';
+      (window.SHOE_LIST || []).forEach(([key, label]) => shoeBox.appendChild(optionBtn(label, key === d.shoes, () => setAppearance({ shoes: key }))));
+    };
+    flowerCheck.addEventListener('change', () => setAppearance({ flower: flowerCheck.checked }));
+    refreshCharUI();
+  }
+
   // ------------------------------------------------------------------ name dialog + startup
   function newToken() { const a = new Uint8Array(16); (window.crypto || {}).getRandomValues ? crypto.getRandomValues(a) : a.forEach((_, i) => a[i] = Math.random() * 256); return Array.from(a, b => b.toString(16).padStart(2, '0')).join(''); }
 
   function showNameDialog(err) {
+    renderCharacterOptions();
     const m = $('name-modal'); m.classList.add('open');
     $('name-error').textContent = err || '';
     const inp = $('name-input'); inp.value = LS.get('nw_name', ''); setTimeout(() => inp.focus(), 50);
@@ -466,6 +526,7 @@
   function init() {
     initPanels();
     const t = thread('lobby'); t.open = true; renderTabs(); msgBox.textContent = '';
+    renderCharacterOptions();
 
     $('name-form').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -474,7 +535,14 @@
       LS.set('nw_name', name); $('name-modal').classList.remove('open');
       startOnline(name);
     });
-    $('name-offline').addEventListener('click', () => { $('name-modal').classList.remove('open'); wantOnline = false; setStatus('offline'); addMsg('lobby', '', 'Playing offline. Reload the page to go online.', { sys: true }); });
+    $('name-offline').addEventListener('click', () => {
+      const name = $('name-input').value.trim();
+      if (/^[A-Za-z0-9_][A-Za-z0-9_ -]{1,14}[A-Za-z0-9_]$/.test(name)) LS.set('nw_name', name);
+      $('name-modal').classList.remove('open'); wantOnline = false; setStatus('offline');
+      addMsg('lobby', '', 'Playing offline. Reload the page to go online.', { sys: true });
+    });
+    const charBtn = $('btn-my-character');
+    if (charBtn) charBtn.addEventListener('click', () => showNameDialog());
 
     $('chat-form').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -495,9 +563,9 @@
     setStatus('looking for server…', 'connecting');
     discoverServer().then(url => {
       discovered = url;
-      if (!url) { connect(); return; }                 // no server: stay offline, explain in the lobby tab
-      const saved = LS.get('nw_name', '');
-      if (saved && LS.get('nw_token', '')) startOnline(saved); else showNameDialog();
+      const hasIdentity = LS.get('nw_name', '') && LS.get('nw_token', '');
+      if (!url) { connect(); if (!hasIdentity) showNameDialog(); return; }   // no server: stay offline, but a first-timer still gets to create their character
+      if (hasIdentity) startOnline(LS.get('nw_name', '')); else showNameDialog();
     });
   }
 

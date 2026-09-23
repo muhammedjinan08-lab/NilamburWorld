@@ -70,10 +70,31 @@ const NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9_ -]{1,14}[A-Za-z0-9_]$/;
 const keyOf = (name) => String(name || '').trim().toLowerCase();
 const clean = (t, n) => String(t || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n);
 
+// ---------- Appearance (character customization) ----------
+// The server never trusts client-picked colours/strings blindly: enums are checked against the same
+// option lists the client offers, and colours are just clamped to a valid 24-bit hex range.
+const HAIR_STYLES = ['short', 'medium', 'long', 'ponytail', 'braid', 'bun', 'bald', 'cap'];
+const OUTFIT_KEYS = ['tshirt_jeans', 'shirt_trousers', 'kurta_leggings', 'shorts_tee', 'mundu_shirt', 'jubba_mundu', 'kasavu_mundu', 'kasavu_saree', 'churidar'];
+const SHOE_TYPES = ['sneakers', 'sandals', 'formal', 'barefoot'];
+const DEFAULT_APPEARANCE = { skin: 0xc68642, hairStyle: 'short', hairColor: 0x0b0a08, flower: false, outfit: 'tshirt_jeans', shoes: 'sneakers' };
+function sanitizeAppearance(a) {
+  a = a || {};
+  const hex = (v, d) => { v = +v; return Number.isFinite(v) ? (Math.max(0, Math.min(0xffffff, Math.round(v))) | 0) : d; };
+  return {
+    skin: hex(a.skin, DEFAULT_APPEARANCE.skin),
+    hairStyle: HAIR_STYLES.includes(a.hairStyle) ? a.hairStyle : DEFAULT_APPEARANCE.hairStyle,
+    hairColor: hex(a.hairColor, DEFAULT_APPEARANCE.hairColor),
+    flower: !!a.flower,
+    outfit: OUTFIT_KEYS.includes(a.outfit) ? a.outfit : DEFAULT_APPEARANCE.outfit,
+    shoes: SHOE_TYPES.includes(a.shoes) ? a.shoes : DEFAULT_APPEARANCE.shoes
+  };
+}
+
 // ---------- Live sessions ----------
-const sessions = new Map();     // key -> { ws, key, name, pos, bucket, veh }
+const sessions = new Map();     // key -> { ws, key, name, pos, bucket, veh, appearance }
 const lobbyHistory = [];        // last messages for newcomers
 let posDirty = false;
+let appearanceDirty = false;    // relayed the same way vehicle state is (see vehDirty below)
 
 // Vehicle driving: `i` is the vehicle's index into the client's own (identical, deterministically
 // built) VEHICLES array - the server has no notion of the world itself, it just relays whichever
@@ -164,12 +185,13 @@ wss.on('connection', (ws, req) => {
       }
       const old = sessions.get(key);
       if (old) { send(old.ws, { t: 'error', code: 'replaced', text: 'You signed in from another tab.' }); old.ws.close(); }
-      me = { ws: ws, key: key, name: u.name, pos: { x: 30, y: 3, z: 14, r: 0, m: 0 }, bucket: null, veh: null };
+      me = { ws: ws, key: key, name: u.name, pos: { x: 30, y: 3, z: 14, r: 0, m: 0 }, bucket: null, veh: null, appearance: sanitizeAppearance(m.appearance) };
       sessions.set(key, me);
       send(ws, { t: 'welcome', name: u.name, history: lobbyHistory, online: sessions.size });
       send(ws, socialFor(key));
       pushSocialToFriends(key);
       posDirty = true;
+      appearanceDirty = true;
       return;
     }
 
@@ -180,6 +202,12 @@ wss.on('connection', (ws, req) => {
         if (![x, y, z, r].every(Number.isFinite) || Math.abs(x) > 1200 || Math.abs(z) > 1200 || Math.abs(y) > 400) return;
         me.pos = { x: x, y: y, z: z, r: r, m: m.m ? 1 : 0 };
         posDirty = true;
+        break;
+      }
+      case 'appearance': {
+        if (!allow(me, 1, 0.5, 4)) return;
+        me.appearance = sanitizeAppearance(m.appearance);
+        appearanceDirty = true;
         break;
       }
       case 'chat': {
@@ -301,6 +329,12 @@ setInterval(() => {
     const vlist = [];
     vehicleDrivers.forEach((rec, i) => vlist.push({ i: i, n: rec.name, x: +rec.x.toFixed(2), z: +rec.z.toFixed(2), yaw: +rec.yaw.toFixed(2), spd: +rec.spd.toFixed(2) }));
     sessions.forEach(s => send(s.ws, { t: 'vehicles', list: vlist }));
+  }
+  if (appearanceDirty) {
+    appearanceDirty = false;
+    const alist = [];
+    sessions.forEach(s => alist.push({ n: s.name, ap: s.appearance }));
+    sessions.forEach(s => send(s.ws, { t: 'appearances', list: alist }));
   }
   if (!posDirty) return;
   posDirty = false;
