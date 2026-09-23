@@ -71,9 +71,22 @@ const keyOf = (name) => String(name || '').trim().toLowerCase();
 const clean = (t, n) => String(t || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n);
 
 // ---------- Live sessions ----------
-const sessions = new Map();     // key -> { ws, key, name, pos, bucket }
+const sessions = new Map();     // key -> { ws, key, name, pos, bucket, veh }
 const lobbyHistory = [];        // last messages for newcomers
 let posDirty = false;
+
+// Vehicle driving: `i` is the vehicle's index into the client's own (identical, deterministically
+// built) VEHICLES array - the server has no notion of the world itself, it just relays whichever
+// index a client claims and its live transform, and makes sure only one person can hold a given
+// index at a time so two people can't both "drive" the same vehicle.
+const vehicleDrivers = new Map();   // i -> { key, name, x, z, yaw, spd }
+let vehDirty = false;
+function releaseVehicle(me) {
+  if (me.veh === null || me.veh === undefined) return;
+  const rec = vehicleDrivers.get(me.veh);
+  if (rec && rec.key === me.key) { vehicleDrivers.delete(me.veh); vehDirty = true; }
+  me.veh = null;
+}
 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function sendTo(key, obj) { const s = sessions.get(key); if (s) send(s.ws, obj); }
@@ -151,7 +164,7 @@ wss.on('connection', (ws, req) => {
       }
       const old = sessions.get(key);
       if (old) { send(old.ws, { t: 'error', code: 'replaced', text: 'You signed in from another tab.' }); old.ws.close(); }
-      me = { ws: ws, key: key, name: u.name, pos: { x: 30, y: 3, z: 14, r: 0, m: 0 }, bucket: null };
+      me = { ws: ws, key: key, name: u.name, pos: { x: 30, y: 3, z: 14, r: 0, m: 0 }, bucket: null, veh: null };
       sessions.set(key, me);
       send(ws, { t: 'welcome', name: u.name, history: lobbyHistory, online: sessions.size });
       send(ws, socialFor(key));
@@ -243,12 +256,37 @@ wss.on('connection', (ws, req) => {
         send(ws, { t: 'dm_history', with: users[tk].name, msgs: list });
         break;
       }
+      case 'vehenter': {
+        const i = Number.isInteger(m.i) ? m.i : -1;
+        if (i < 0 || i > 5000) return;
+        const held = vehicleDrivers.get(i);
+        if (held && held.key !== me.key) { send(ws, { t: 'veh_denied', i: i }); return; }
+        releaseVehicle(me);   // give up whatever they held before, if anything
+        me.veh = i;
+        vehicleDrivers.set(i, { key: me.key, name: me.name, x: 0, z: 0, yaw: 0, spd: 0 });
+        vehDirty = true;
+        break;
+      }
+      case 'vehpos': {
+        if (me.veh === null || me.veh === undefined || me.veh !== m.i) return;
+        if (!allow(me, 1, 30, 40)) return;
+        const x = +m.x, z = +m.z, yaw = +m.yaw, spd = +m.spd;
+        if (![x, z, yaw, spd].every(Number.isFinite) || Math.abs(x) > 1200 || Math.abs(z) > 1200) return;
+        const rec = vehicleDrivers.get(me.veh);
+        if (rec) { rec.x = x; rec.z = z; rec.yaw = yaw; rec.spd = spd; vehDirty = true; }
+        break;
+      }
+      case 'vehexit': {
+        if (me.veh === m.i) releaseVehicle(me);
+        break;
+      }
     }
   });
 
   ws.on('close', () => {
     if (me && sessions.get(me.key) && sessions.get(me.key).ws === ws) {
       sessions.delete(me.key);
+      releaseVehicle(me);
       pushSocialToFriends(me.key);
       posDirty = true;
     }
@@ -258,6 +296,12 @@ wss.on('connection', (ws, req) => {
 
 // Relay player positions ~10 times a second, only when something changed
 setInterval(() => {
+  if (vehDirty) {
+    vehDirty = false;
+    const vlist = [];
+    vehicleDrivers.forEach((rec, i) => vlist.push({ i: i, n: rec.name, x: +rec.x.toFixed(2), z: +rec.z.toFixed(2), yaw: +rec.yaw.toFixed(2), spd: +rec.spd.toFixed(2) }));
+    sessions.forEach(s => send(s.ws, { t: 'vehicles', list: vlist }));
+  }
   if (!posDirty) return;
   posDirty = false;
   const list = [];

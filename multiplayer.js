@@ -16,7 +16,8 @@
 
   const NW = window.NW = {
     connected: false, name: null, friends: [], incoming: [], outgoing: [],
-    remote: new Map(), onlineNames: []
+    remote: new Map(), onlineNames: [],
+    remoteVehicles: new Map()   // vehicle index -> { i, n (driver name), x, z, yaw, spd }
   };
 
   // ------------------------------------------------------------------ minimise buttons
@@ -147,10 +148,11 @@
     ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } handle(m); };
     ws.onclose = () => {
       const was = NW.connected;
-      NW.connected = false; clearRemote(); renderSocial();
+      NW.connected = false; clearRemote(); clearRemoteVehicles(); renderSocial();
       setStatus(wantOnline ? 'reconnecting…' : 'offline', wantOnline ? 'connecting' : '');
       if (was) addMsg('lobby', '', 'Disconnected from the server. Trying to reconnect…', { sys: true });
       if (wantOnline) scheduleRetry();
+      lastVehIndex = -1;
     };
     ws.onerror = () => {};
   }
@@ -215,6 +217,15 @@
         } else toast(m.text, m.kind === 'warn' ? 'warn' : '');
         break;
       case 'players': updateRemote(m.list); break;
+      case 'vehicles': updateRemoteVehicles(m.list); break;
+      case 'veh_denied':
+        // Raced with someone else for the same vehicle and lost - back out of it locally too.
+        if (typeof state !== 'undefined' && state.driving && typeof VEHICLES !== 'undefined' && VEHICLES.indexOf(state.driving) === m.i) {
+          if (typeof exitVehicle === 'function') exitVehicle();
+          toast('Someone else is already driving that.', 'warn');
+        }
+        lastVehIndex = -1;
+        break;
     }
   }
 
@@ -336,8 +347,54 @@
   }
   function clearRemote() { Array.from(NW.remote.keys()).forEach(removeRemote); }
 
+  // ------------------------------------------------------------------ synced vehicles
+  // A vehicle's index into the local VEHICLES array (world.js/town.js build it identically, in a
+  // fixed order, on every client) is the shared id. While someone else drives one, it's taken out of
+  // local script control here exactly the way enterVehicle() would locally, marked occupied so we
+  // can only ride along (R) rather than also try to drive it, and its transform is relayed live.
+  function releaseLocalVehicle(v) {
+    if (!v) return;
+    v.occupied = false;
+    v.spd = 0;
+    if (!v.collider && typeof addCircleCollider === 'function') v.collider = addCircleCollider(v.x, v.z, v.radius);
+    if (typeof state !== 'undefined' && state.ridingVehicle === v && typeof exitRide === 'function') exitRide();
+  }
+  function updateRemoteVehicles(list) {
+    if (typeof VEHICLES === 'undefined') return;
+    const seen = new Set();
+    list.forEach(rv => {
+      const v = VEHICLES[rv.i];
+      if (!v) return;
+      seen.add(rv.i);
+      if (typeof state !== 'undefined' && state.driving === v) return;   // that's this browser's own vehicle - ignore the echo
+      NW.remoteVehicles.set(rv.i, rv);
+      if (v.mover) {
+        const idx = TOWN_ANIM.movers.indexOf(v.mover);
+        if (idx >= 0) TOWN_ANIM.movers.splice(idx, 1);
+        v.mover = null;
+      } else if (v.collider && typeof removeCircleCollider === 'function') {
+        removeCircleCollider(v.collider);
+        v.collider = null;
+      }
+      v.occupied = true;
+      v.x = rv.x; v.z = rv.z; v.yaw = rv.yaw; v.spd = rv.spd;
+      const gy = v.type === 'kayak' ? WATER_Y + 0.16 : groundHeight(v.x, v.z) + ROAD_Y;
+      v.g.position.set(v.x, gy, v.z);
+      v.g.rotation.y = v.yaw;
+    });
+    NW.remoteVehicles.forEach((rv, i) => {
+      if (seen.has(i)) return;
+      NW.remoteVehicles.delete(i);
+      releaseLocalVehicle(VEHICLES[i]);
+    });
+  }
+  function clearRemoteVehicles() {
+    NW.remoteVehicles.forEach((rv, i) => { if (typeof VEHICLES !== 'undefined') releaseLocalVehicle(VEHICLES[i]); });
+    NW.remoteVehicles.clear();
+  }
+
   // Called every frame from the main loop
-  let sendTimer = 0, last = { x: 0, z: 0 };
+  let sendTimer = 0, last = { x: 0, z: 0 }, lastVehIndex = -1;
   NW.tick = function (dt) {
     NW.remote.forEach(r => {
       const g = r.av.root, k = Math.min(1, dt * 9);
@@ -353,8 +410,24 @@
       r.av.arms[0].rotation.x = -sw * 0.8; r.av.arms[1].rotation.x = sw * 0.8;
     });
     if (!NW.connected || typeof playerMesh === 'undefined' || !playerMesh) return;
+
+    // Tell others what I'm driving (or that I've stopped) the instant it changes, not throttled -
+    // the state transition itself matters more than any one frame's position.
+    if (typeof state !== 'undefined' && typeof VEHICLES !== 'undefined') {
+      const v = state.driving, i = v ? VEHICLES.indexOf(v) : -1;
+      if (i !== lastVehIndex) {
+        if (lastVehIndex >= 0) send({ t: 'vehexit', i: lastVehIndex });
+        if (i >= 0) send({ t: 'vehenter', i: i });
+        lastVehIndex = i;
+      }
+    }
+
     sendTimer += dt;
     if (sendTimer < 0.1) return;
+    if (lastVehIndex >= 0 && state.driving) {
+      const v = state.driving;
+      send({ t: 'vehpos', i: lastVehIndex, x: +v.x.toFixed(2), z: +v.z.toFixed(2), yaw: +v.yaw.toFixed(2), spd: +v.spd.toFixed(2) });
+    }
     const p = playerMesh.parent.position;
     const moving = Math.hypot(p.x - last.x, p.z - last.z) / sendTimer > 0.6;
     send({ t: 'pos', x: +p.x.toFixed(2), y: +p.y.toFixed(2), z: +p.z.toFixed(2), r: +playerMesh.rotation.y.toFixed(2), m: moving ? 1 : 0 });
