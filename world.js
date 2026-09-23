@@ -698,7 +698,7 @@ function buildVegetation() {
         const x = c.x + gx + (rng() - 0.5) * 1.4, z = c.z + gz + (rng() - 0.5) * 1.4;
         const d = Math.hypot(x - c.x, z - c.z);
         if (d < 15 || d > 46) continue;
-        if (Math.abs(x) < 34) continue;
+        if (Math.abs(x) < 34 || Math.abs(x - RAIL_X) < 10) continue;
         addTeak(x, heightAt(x, z), z, 1.0 + rng() * 0.35);
       }
     }
@@ -1282,14 +1282,19 @@ function buildAdyanparaWaterfall() {
     // own underside needs no clip: makeRockMass already zeroes jitter at yy=0 (its own bottom face, the
     // "keep base anchored" line above) so it can't sag into the corridor regardless of the noise seed.
     g.add(mk(makeRockMass(cHalfW * 2, 21, cZ * 2 + 2, 21, 0, 0, false), M.rock, railLX, roofY + 10.5, 0));
-    // Masonry portals at both mouths (a plain arch frame, in the same stone material as the town's
-    // colonial-era buildings) plus a dark fill so the bore reads as a real shadowed tunnel from outside
+    // Portal trim and the dark interior fill are both just faint hints now, not solid geometry - the
+    // "frame" boxes were sized to span the corridor's own cross-section (so the tunnel read as properly
+    // open at both mouths from outside), which meant they were literally sitting across the train's
+    // path; made them and the dark fill mostly see-through instead of opaque so neither blocks the view
+    // through the bore. Local materials, not the shared M.stone - that one's used by the town buildings.
+    const portalMat = new THREE.MeshStandardMaterial({ map: TEX.rock, normalMap: TEX.rockN, roughness: 0.9, color: 0xc9bfae, transparent: true, opacity: 0.15, depthWrite: false });
+    const fillMat = new THREE.MeshStandardMaterial({ color: 0x0b0906, roughness: 1, transparent: true, opacity: 0.15, depthWrite: false });
     for (const pz of [-cZ, cZ]) {
       const frameW = cHalfW * 2 + 2.4, frameH = roofY - floorY + 1.6;
-      g.add(mk(texBox(frameW, frameH, 1.0, 2), M.stone, railLX, (floorY + roofY) / 2, pz, false, true));
-      g.add(mk(texBox(cHalfW * 2, roofY - floorY, 0.6, 2), new THREE.MeshStandardMaterial({ color: 0x0b0906, roughness: 1 }), railLX, (floorY + roofY) / 2, pz - (pz > 0 ? 0.5 : -0.5), false, false));
+      g.add(mk(texBox(frameW, frameH, 1.0, 2), portalMat, railLX, (floorY + roofY) / 2, pz, false, false));
+      g.add(mk(texBox(cHalfW * 2, roofY - floorY, 0.6, 2), fillMat, railLX, (floorY + roofY) / 2, pz - (pz > 0 ? 0.5 : -0.5), false, false));
     }
-    g.add(mk(new THREE.BoxGeometry(cHalfW * 1.7, roofY - floorY - 1, 3), new THREE.MeshStandardMaterial({ color: 0x0b0906, roughness: 1 }), railLX, (floorY + roofY) / 2, 0, false, false));
+    g.add(mk(new THREE.BoxGeometry(cHalfW * 1.7, roofY - floorY - 1, 3), fillMat, railLX, (floorY + roofY) / 2, 0, false, false));
   }
 
   // ---------- Trail to the spring ----------
