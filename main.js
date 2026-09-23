@@ -16,7 +16,8 @@ const state = {
   playerVelocity: { x: 0, y: 0, z: 0 },
   isGrounded: true,
   driving: null,        // the VEHICLES entry currently being driven, or null
-  ridingTrain: false
+  ridingTrain: false,
+  ridingVehicle: null   // the VEHICLES entry being ridden as a passenger (not driving it), or null
 };
 
 // Landmarks Data
@@ -90,6 +91,97 @@ const LANDMARKS = {
     pos: { x: 757, z: -100 },
     radius: 20,
     questId: "quest_temple"
+  },
+  church: {
+    name: "St. Thomas Church",
+    desc: "Parish church west of the main street, with a bell tower - Holy Mass at 6:30 and 9:00.",
+    pos: { x: 716, z: 100 },
+    radius: 20,
+    questId: "quest_church"
+  },
+  mosque: {
+    name: "Juma Masjid",
+    desc: "Mosque beside the west lane, with a green dome and twin minarets.",
+    pos: { x: 693.5, z: -100 },
+    radius: 20,
+    questId: "quest_mosque"
+  },
+  techbazaar: {
+    name: "Tech Bazaar",
+    desc: "Electronics shop on the bazaar street: computers, cameras and accessories.",
+    pos: { x: 754, z: 74 },
+    radius: 14,
+    questId: "quest_techbazaar"
+  },
+  police: {
+    name: "Nilambur Police Station",
+    desc: "Kerala Police station on the west lane.",
+    pos: { x: 693.5, z: -34 },
+    radius: 16,
+    questId: "quest_police"
+  },
+  firestation: {
+    name: "Fire & Rescue Station",
+    desc: "Emergency fire and rescue depot, dial 101.",
+    pos: { x: 693.5, z: -56 },
+    radius: 16,
+    questId: "quest_fire"
+  },
+  hospital: {
+    name: "Govt. Taluk Hospital",
+    desc: "Government hospital on the west lane, OP hours 8am to 6pm.",
+    pos: { x: 693.5, z: 36 },
+    radius: 18,
+    questId: "quest_hospital"
+  },
+  school: {
+    name: "Govt. Higher Secondary School",
+    desc: "The town's government higher secondary school.",
+    pos: { x: 693.5, z: 62 },
+    radius: 18,
+    questId: "quest_school"
+  },
+  postoffice: {
+    name: "Nilambur Post Office",
+    desc: "Post office serving PIN 679329.",
+    pos: { x: 693.5, z: -15.5 },
+    radius: 14,
+    questId: "quest_post"
+  },
+  kseb: {
+    name: "KSEB Section Office",
+    desc: "Kerala State Electricity Board section office.",
+    pos: { x: 693.5, z: 15.5 },
+    radius: 14,
+    questId: "quest_kseb"
+  },
+  bank: {
+    name: "Nilambur Co-op Bank",
+    desc: "Co-operative bank with ATM and locker facilities.",
+    pos: { x: 714.5, z: -15.5 },
+    radius: 14,
+    questId: "quest_bank"
+  },
+  theatre: {
+    name: "Sreedhar Theatre",
+    desc: "Single-screen cinema on the cross road, four shows daily.",
+    pos: { x: 767.5, z: -15.5 },
+    radius: 16,
+    questId: "quest_theatre"
+  },
+  fuelstation: {
+    name: "Fuel Station",
+    desc: "Petrol and diesel pumps beside the fish market.",
+    pos: { x: 783, z: -27 },
+    radius: 16,
+    questId: "quest_fuel"
+  },
+  kayak: {
+    name: "Chaliyar Kayak Rentals",
+    desc: "Rent a kayak on the riverbank here - paddle the Chaliyar and beach it anywhere along the shore when you're done.",
+    pos: { x: -16, z: 40 },
+    radius: 18,
+    questId: "quest_kayak"
   }
 };
 
@@ -104,7 +196,8 @@ const TELEPORT = {
   town: { dx: -6, dz: 4 },
   busstation: { dx: 0, dz: -15 },
   market: { dx: -18, dz: 0 },
-  temple: { dx: -14, dz: 0 }
+  temple: { dx: -14, dz: 0 },
+  kayak: { dx: 3, dz: 2 }
 };
 
 // Quests Data
@@ -117,7 +210,20 @@ const QUESTS = [
   { id: "quest_town", title: "Town Explorer", desc: "Walk the Nilambur bazaar past the clock tower and shops.", score: 200, done: false },
   { id: "quest_bus", title: "All Aboard", desc: "Visit the KSRTC bus station.", score: 150, done: false },
   { id: "quest_market", title: "Market Day", desc: "Browse the fish & vegetable market.", score: 150, done: false },
-  { id: "quest_temple", title: "Temple Visit", desc: "Reach the temple at the end of the main street.", score: 150, done: false }
+  { id: "quest_temple", title: "Temple Visit", desc: "Reach the temple at the end of the main street.", score: 150, done: false },
+  { id: "quest_church", title: "Sunday Service", desc: "Visit St. Thomas Church.", score: 80, done: false },
+  { id: "quest_mosque", title: "Call to Prayer", desc: "Visit Juma Masjid.", score: 80, done: false },
+  { id: "quest_techbazaar", title: "Window Shopping", desc: "Check out Tech Bazaar on the bazaar street.", score: 60, done: false },
+  { id: "quest_police", title: "Report In", desc: "Visit the Nilambur Police Station.", score: 60, done: false },
+  { id: "quest_fire", title: "Fire Drill", desc: "Visit the Fire & Rescue Station.", score: 60, done: false },
+  { id: "quest_hospital", title: "House Call", desc: "Visit the Govt. Taluk Hospital.", score: 60, done: false },
+  { id: "quest_school", title: "Old School", desc: "Visit the Govt. Higher Secondary School.", score: 60, done: false },
+  { id: "quest_post", title: "Send a Postcard", desc: "Visit the Nilambur Post Office.", score: 50, done: false },
+  { id: "quest_kseb", title: "Power Up", desc: "Visit the KSEB Section Office.", score: 50, done: false },
+  { id: "quest_bank", title: "Bank Errand", desc: "Visit the Nilambur Co-op Bank.", score: 50, done: false },
+  { id: "quest_theatre", title: "Movie Night", desc: "Catch a show at Sreedhar Theatre.", score: 70, done: false },
+  { id: "quest_fuel", title: "Fill 'Er Up", desc: "Visit the Fuel Station.", score: 50, done: false },
+  { id: "quest_kayak", title: "Paddle the Chaliyar", desc: "Rent a kayak at the riverside dock and get out on the water.", score: 150, done: false }
 ];
 
 // Three.js Core Variables
@@ -252,6 +358,7 @@ function buildWorld() {
   buildRailwayTrack();
   buildMinorStations();
   buildNilamburTown();
+  buildKayakDock();     // uses movingVehicle()/TM materials set up by buildNilamburTown()
   buildVegetation();
   buildPlayerAvatar();
   buildRainSystem();
@@ -757,6 +864,7 @@ function updatePlayerMovement(dt) {
   if (!playerMesh) return;
   if (state.driving) { updateVehicleDriving(dt); return; }
   if (state.ridingTrain) { updateRidingTrain(dt); return; }
+  if (state.ridingVehicle) { updateRiding(dt); return; }
   const parent = playerMesh.parent;
   const sprint = keyState['ShiftLeft'] || keyState['ShiftRight'];
   let speed = sprint ? 17 : 8;
@@ -793,6 +901,7 @@ function updatePlayerMovement(dt) {
   p.x = clamp(p.x, -lim, lim);
   p.z = clamp(p.z, -lim, lim);
   resolveCollisions(p, 0.45);
+  resolveVehicleCollisions(p, 0.45, null);
 
   // Vertical: gravity, jump, terrain following
   const ground = groundHeight(p.x, p.z);
@@ -822,10 +931,11 @@ function updateCamera(dt) {
   const targetDist = state.isCameraOrbit ? wantDist : 9;
   camRig.dist += (targetDist - camRig.dist) * Math.min(1, dt * 4);
 
-  // While driving or riding the train, lock the camera directly behind, facing the same way it's
-  // travelling ("always show the straight/front view") so steering reads correctly - free orbit and
-  // the idle auto-rotate are both suspended.
-  const lockYaw = state.driving ? state.driving.yaw + Math.PI : (state.ridingTrain ? Math.PI : null);
+  // Only while actually DRIVING is the camera locked directly behind, facing the way it's travelling
+  // ("always show the straight/front view") so steering reads correctly. Riding the train or riding
+  // along as a passenger is a free look-around "window" view instead - normal orbit/drag/auto-rotate
+  // all apply, just recentred on the vehicle (playerMesh.parent tracks it while riding).
+  const lockYaw = state.driving ? state.driving.yaw + Math.PI : null;
   if (lockYaw !== null) {
     camRig.yaw = lockYaw;   // hard lock, no lag - the view must stay exactly straight behind while driving
     camRig.pitch += (0.22 - camRig.pitch) * Math.min(1, dt * 4);
@@ -1211,6 +1321,7 @@ function setupEventListeners() {
     keyState[e.code] = true;
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     if (e.code === 'KeyE' && !e.repeat) interactNearest();
+    if (e.code === 'KeyR' && !e.repeat) toggleRideVehicle();
   });
   window.addEventListener('keyup', (e) => { keyState[e.code] = false; });
   window.addEventListener('blur', () => { for (const k in keyState) keyState[k] = false; });
@@ -1218,7 +1329,7 @@ function setupEventListeners() {
   // Mouse look: drag to orbit, wheel to zoom
   const cont = document.getElementById('canvas-container');
   let lx = 0, ly = 0;
-  cont.addEventListener('mousedown', (e) => { if (state.driving || state.ridingTrain) return; camRig.dragging = true; lx = e.clientX; ly = e.clientY; });
+  cont.addEventListener('mousedown', (e) => { if (state.driving) return; camRig.dragging = true; lx = e.clientX; ly = e.clientY; });
   window.addEventListener('mouseup', () => { camRig.dragging = false; });
   window.addEventListener('mousemove', (e) => {
     if (!camRig.dragging) return;
@@ -1308,16 +1419,39 @@ function setupEventListeners() {
 const VEH_SPECS = {
   car: { max: 24, acc: 16, turn: 2.0, camDist: 15 },
   bike: { max: 28, acc: 20, turn: 2.9, camDist: 11 },
-  bus: { max: 15, acc: 7, turn: 1.0, camDist: 22 }
+  bus: { max: 15, acc: 7, turn: 1.0, camDist: 22 },
+  auto: { max: 18, acc: 12, turn: 2.3, camDist: 12 },
+  kayak: { max: 7, acc: 5, turn: 2.0, camDist: 8 }
 };
 const ENTER_RANGE = 3.5;
+
+// Every vehicle is a solid obstacle - not just the ones with a static collider registered while
+// parked. Scripted traffic (still under updateTown's control) and vehicles parked with noCollider
+// never got a COLL entry at all, so on foot you could walk straight through them; this pushes `pos`
+// (the on-foot player, or another vehicle) out of any VEHICLES entry that isn't already handled by
+// the normal resolveCollisions pass. `skip` is the vehicle currently being driven, if any.
+function resolveVehicleCollisions(pos, pr, skip) {
+  if (typeof VEHICLES === 'undefined') return;
+  for (let i = 0; i < VEHICLES.length; i++) {
+    const v = VEHICLES[i];
+    if (v === skip || v.occupied || v.collider) continue;
+    const vx = v.mover ? v.g.position.x : v.x, vz = v.mover ? v.g.position.z : v.z;
+    const dx = pos.x - vx, dz = pos.z - vz;
+    const min = v.radius + pr;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < min * min && d2 > 1e-6) {
+      const d = Math.sqrt(d2), push = (min - d) / d;
+      pos.x += dx * push; pos.z += dz * push;
+    }
+  }
+}
 
 function nearestFreeVehicle() {
   if (typeof VEHICLES === 'undefined') return null;
   let best = null, bd = 1e9;
   for (let i = 0; i < VEHICLES.length; i++) {
     const v = VEHICLES[i];
-    if (v.occupied) continue;
+    if (v.occupied || v === state.ridingVehicle) continue;
     // Still under script control (traffic loop): its x/z fields are only a stale placeholder, so
     // check against its live transform instead.
     const vx = v.mover ? v.g.position.x : v.x, vz = v.mover ? v.g.position.z : v.z;
@@ -1325,6 +1459,68 @@ function nearestFreeVehicle() {
     if (d < bd) { bd = d; best = v; }
   }
   return best && bd < best.radius + ENTER_RANGE ? best : null;
+}
+
+// ---------------------------------------------------------------------------
+// Riding along as a passenger (a separate R key, not E, so it never competes with driving a free
+// vehicle): while a vehicle is still under script control (traffic loop) - or, once vehicle state is
+// synced over multiplayer, driven by another real player - anyone can hop on for the ride instead of
+// taking it over, and look around freely instead of being locked to the driver's forward-facing view.
+function nearestRideableVehicle() {
+  if (typeof VEHICLES === 'undefined') return null;
+  let best = null, bd = 1e9;
+  for (let i = 0; i < VEHICLES.length; i++) {
+    const v = VEHICLES[i];
+    if (v === state.driving || !(v.mover || v.occupied)) continue;
+    const vx = v.mover ? v.g.position.x : v.x, vz = v.mover ? v.g.position.z : v.z;
+    const d = Math.hypot(state.playerPos.x - vx, state.playerPos.z - vz);
+    if (d < bd) { bd = d; best = v; }
+  }
+  return best && bd < best.radius + ENTER_RANGE ? best : null;
+}
+
+function toggleRideVehicle() {
+  if (state.driving || state.ridingTrain) return;
+  if (state.ridingVehicle) { exitRide(); return; }
+  const v = nearestRideableVehicle();
+  if (v) enterRide(v);
+}
+
+function enterRide(v) {
+  state.ridingVehicle = v;
+  playerMesh.parent.visible = false;
+  camRig._savedDist = camRig.distTarget;
+  camRig.distTarget = (VEH_SPECS[v.type] || VEH_SPECS.car).camDist;
+  // No yaw snap here (unlike driving) - riding is a free look-around view, not a locked one.
+  triggerLandmarkPopup('🪟 Riding along', 'Look around freely and watch the world go by. Press R to hop off anywhere.');
+}
+
+function exitRide() {
+  const v = state.ridingVehicle;
+  if (!v) return;
+  const vx = v.mover ? v.g.position.x : v.x, vz = v.mover ? v.g.position.z : v.z;
+  const vyaw = v.mover ? v.g.rotation.y : v.yaw;
+  const ex = vx + Math.cos(vyaw) * (v.radius + 1.1), ez = vz - Math.sin(vyaw) * (v.radius + 1.1);
+  const g = groundHeight(ex, ez);
+  playerMesh.parent.visible = true;
+  playerMesh.parent.position.set(ex, g, ez);
+  state.playerPos.x = ex; state.playerPos.y = g; state.playerPos.z = ez;
+  state.playerVelocity.y = 0; state.isGrounded = true;
+  camRig.distTarget = camRig._savedDist || 16;
+  state.ridingVehicle = null;
+  triggerLandmarkPopup('🚶 On foot', 'You hopped off. Ride along with a moving vehicle (R), or drive a parked one (E).');
+}
+
+function updateRiding(dt) {
+  const v = state.ridingVehicle;
+  if (!v || !(v.mover || v.occupied)) { exitRide(); return; }   // the ride ended (e.g. its driver got out)
+  const vx = v.mover ? v.g.position.x : v.x, vz = v.mover ? v.g.position.z : v.z;
+  const vy = v.mover ? v.g.position.y : (v.type === 'kayak' ? WATER_Y + 0.16 : groundHeight(vx, vz) + ROAD_Y);
+  const parent = playerMesh.parent;
+  parent.position.set(vx, vy + 1.0, vz);
+  state.playerPos.x = vx; state.playerPos.y = vy + 1.0; state.playerPos.z = vz;
+  camRig.idleTime = 0;
+  document.getElementById('coords-text').innerText = `X: ${Math.round(vx)} | Z: ${Math.round(vz)}`;
 }
 
 function tryEnterVehicle() {
@@ -1352,8 +1548,9 @@ function enterVehicle(v) {
   camRig._savedDist = camRig.distTarget;
   camRig.distTarget = (VEH_SPECS[v.type] || VEH_SPECS.car).camDist;
   camRig.yaw = v.yaw + Math.PI;   // snap straight in behind it - see updateCamera for the ongoing lock
-  const icon = v.type === 'bus' ? '🚌' : v.type === 'bike' ? '🏍️' : '🚗';
-  triggerLandmarkPopup(icon + ' Driving', 'WASD to steer, SPACE to brake, E to get out.');
+  const icon = v.type === 'bus' ? '🚌' : v.type === 'bike' ? '🏍️' : v.type === 'auto' ? '🛺' : v.type === 'kayak' ? '🛶' : '🚗';
+  const hint = v.type === 'kayak' ? 'WASD to paddle, E to get out - beach it anywhere on the shore.' : 'WASD to steer, SPACE to brake, E to get out.';
+  triggerLandmarkPopup(icon + (v.type === 'kayak' ? ' Kayaking' : ' Driving'), hint);
 }
 
 function exitVehicle() {
@@ -1393,13 +1590,31 @@ function updateVehicleDriving(dt) {
     v.yaw += inR * s.turn * dt * turnDir * speedFactor;
   }
 
-  v.x += Math.sin(v.yaw) * v.spd * dt;
-  v.z += Math.cos(v.yaw) * v.spd * dt;
+  const nx = v.x + Math.sin(v.yaw) * v.spd * dt;
+  const nz = v.z + Math.cos(v.yaw) * v.spd * dt;
+
+  if (v.type === 'kayak') {
+    // The river is the kayak's "road" instead of colliders - paddle wherever the water reaches
+    // (isRiverWater follows the river's own fbm-shaped bank), and beach gently against the shore
+    // instead of climbing onto dry land. Exiting is allowed anywhere, so there's no dock to return to.
+    if (isRiverWater(nx, nz)) { v.x = nx; v.z = nz; } else v.spd *= 0.35;
+    v.g.position.set(v.x, WATER_Y + 0.16, v.z);
+    v.g.rotation.y = v.yaw;
+    const parent = playerMesh.parent;
+    parent.position.set(v.x, WATER_Y + 0.55, v.z);
+    state.playerPos.x = v.x; state.playerPos.y = WATER_Y + 0.55; state.playerPos.z = v.z;
+    camRig.idleTime = 0;
+    document.getElementById('coords-text').innerText = `X: ${Math.round(v.x)} | Z: ${Math.round(v.z)}`;
+    return;
+  }
+
+  v.x = nx; v.z = nz;
   const lim = WORLD_SIZE / 2 - 10;
   v.x = clamp(v.x, -lim, lim); v.z = clamp(v.z, -lim, lim);
 
   const pos = { x: v.x, z: v.z };
   resolveCollisions(pos, v.radius);
+  resolveVehicleCollisions(pos, v.radius, v);
   if (Math.abs(pos.x - v.x) > 1e-4 || Math.abs(pos.z - v.z) > 1e-4) v.spd *= 0.55;
   v.x = pos.x; v.z = pos.z;
 
@@ -1466,6 +1681,7 @@ function updateRidingTrain(dt) {
 // E key: drive/exit a vehicle, board/exit the train, or show the info card of the closest landmark
 function interactNearest() {
   if (state.driving) { exitVehicle(); return; }
+  if (state.ridingVehicle) { exitRide(); return; }
   if (state.ridingTrain) { tryExitTrain(); return; }
   if (tryBoardTrain()) return;
   if (tryEnterVehicle()) return;

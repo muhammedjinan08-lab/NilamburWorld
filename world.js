@@ -351,6 +351,59 @@ function buildChaliyarRiver() {
   scene.add(waterMesh);
 }
 
+// True wherever the carved-out river bed actually dips below the water surface - this follows the
+// river's fbm-based meander automatically (heightAt already encodes its shape), so it doubles as the
+// kayak's paddleable area without needing a separate hardcoded channel.
+function isRiverWater(x, z) {
+  return heightAt(x, z) < WATER_Y - 0.15;
+}
+
+// ---------- Kayak rental dock ----------
+// A small wooden pier on the west bank, a little south of the Canoly Bridge, with two drivable
+// kayaks moored at the water end - see LANDMARKS.kayak for its position/signage text.
+function buildKayakDock() {
+  const p = LANDMARKS.kayak.pos;
+  const g = new THREE.Group();
+  g.position.set(p.x, 0, p.z);
+  const deckY = WATER_Y + 0.55, plankLen = 9;
+  // Flat deck, level, running from the bank (local x=0) out over the water (local x=plankLen)
+  g.add(mk(texBox(plankLen, 0.14, 3.0, 3), M.wood, plankLen / 2, deckY, 0, false, true));
+  for (let i = 0; i <= 6; i++) {
+    const lx = i * (plankLen / 6);
+    for (const lz of [-1.2, 1.2]) {
+      const wx = p.x + lx, wz = p.z + lz;
+      const postH = Math.max(0.3, deckY - heightAt(wx, wz));
+      g.add(mk(new THREE.CylinderGeometry(0.1, 0.12, postH, 8), M.woodDark, lx, deckY - postH / 2, lz));
+    }
+  }
+  // Handrails
+  for (const s of [-1, 1]) {
+    g.add(mk(new THREE.BoxGeometry(plankLen, 0.06, 0.06), M.woodDark, plankLen / 2, deckY + 0.55, s * 1.42));
+    for (let i = 0; i <= 6; i++) g.add(mk(new THREE.CylinderGeometry(0.035, 0.035, 0.55, 6), M.woodDark, i * (plankLen / 6), deckY + 0.28, s * 1.42));
+  }
+  // Sign
+  const nb = new THREE.MeshStandardMaterial({ map: signTexture(['CHALIYAR KAYAK RENTALS', 'Rent · Paddle · Beach anywhere'], { w: 640, h: 120, size: 38, bg: '#0d6b57', fg: '#ffffff', border: '#ffd166' }), roughness: 0.6 });
+  g.add(mk(new THREE.BoxGeometry(4.4, 0.85, 0.1), nb, 1.5, deckY + 1.3, -1.6));
+  const postH2 = Math.max(0.3, deckY + 0.85 - heightAt(p.x + 1.5, p.z - 1.6));
+  g.add(mk(new THREE.CylinderGeometry(0.09, 0.11, postH2, 8), M.woodDark, 1.5, deckY + 0.85 - postH2 / 2, -1.6));
+  scene.add(g);
+  // Walkable deck surface (a flat pier, not a wall - matches the fix for the KSRTC platform)
+  GROUND_EXTRAS.push((x, z) => {
+    const lx = x - p.x, lz = z - p.z;
+    return (lx > -0.5 && lx < plankLen && Math.abs(lz) < 1.5) ? deckY + 0.07 : null;
+  });
+  // Two drivable kayaks moored at the water end of the pier
+  const kayakColors = [0xe0522a, 0x1c86c8];
+  kayakColors.forEach((hex, i) => {
+    const kg = movingVehicle('kayak', hex);
+    const kx = p.x + plankLen - 1, kz = p.z + (i === 0 ? -1.8 : 1.8);
+    kg.position.set(kx, WATER_Y + 0.16, kz);
+    kg.rotation.y = i === 0 ? Math.PI * 0.5 : Math.PI * 1.5;
+    const radius = VEH_RADIUS.kayak;
+    VEHICLES.push({ type: 'kayak', g: kg, x: kx, z: kz, yaw: kg.rotation.y, spd: 0, collider: addCircleCollider(kx, kz, radius), radius: radius, mover: null, occupied: false });
+  });
+}
+
 // ---------- Rocks ----------
 function makeRockGeometry(seed) {
   const g = new THREE.IcosahedronGeometry(1, 2);

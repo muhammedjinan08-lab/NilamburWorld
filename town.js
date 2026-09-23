@@ -12,8 +12,8 @@ const TOWN_ANIM = { movers: [], walkers: [] };
 // x/z are world coordinates throughout (unlike most of this file, which is authored in local coordinates and
 // shifted by +OX at render time) so main.js's driving code can use them directly with groundHeight/resolveCollisions.
 const VEHICLES = [];
-const DRIVABLE_TYPES = { car: 1, bike: 1, bus: 1 };
-const VEH_RADIUS = { car: 1.15, bike: 0.55, bus: 1.75 };
+const DRIVABLE_TYPES = { car: 1, bike: 1, bus: 1, auto: 1, kayak: 1 };
+const VEH_RADIUS = { car: 1.15, bike: 0.55, bus: 1.75, auto: 0.85, kayak: 0.9 };
 const TX = 178;                          // town is authored in local coordinates (main street x = TX) ...
 const OX = TOWN.cx - TX;                 // ... and shifted into the world by OX
 const TC = { x: TX, z: 0 };              // main street runs N-S through x = TC.x, cross road E-W through z = 0
@@ -465,10 +465,22 @@ function vehicleParts(type, hex) {
       if (hex === 0xc8201e) add('metal', B(0.5, 0.25, 4.6), 0, 2.3, -0.8, 0xc9ced2);
       for (const sx of [-1, 1]) for (const sz of (hex === 0xc8201e ? [-2.2, 2.2] : [-1.6, 1.6])) wheel(sx * 1.0, sz, 0.42, 0.28);
       break;
+    case 'kayak': {
+      // Slender hull (a stretched, flattened capsule so it tapers at bow and stern), a small
+      // cockpit deck and a paddle laid across it. Local +z is forward, matching every other vehicle.
+      const hull = new THREE.CapsuleGeometry(0.34, 1.75, 4, 10);
+      hull.scale(1, 0.6, 1);
+      add('paint', hull, 0, 0.24, 0, hex, Math.PI / 2, 0, 0);
+      add('wood', B(0.34, 0.05, 0.55), 0, 0.37, 0, 0x6a4a28);
+      add('wood', B(0.045, 0.045, 2.0), 0, 0.45, 0, 0x8a5a2a);
+      add('paint', B(0.16, 0.02, 0.42), 0, 0.45, 0.9, 0xe8e8e0);
+      add('paint', B(0.16, 0.02, 0.42), 0, 0.45, -0.9, 0xe8e8e0);
+      break;
+    }
   }
   return P;
 }
-const VEH_LEN = { car: 4.0, auto: 2.6, bus: 10.4, bike: 1.7, van: 5.0 };
+const VEH_LEN = { car: 4.0, auto: 2.6, bus: 10.4, bike: 1.7, van: 5.0, kayak: 2.0 };
 
 function placeVehicle(type, hex, x, z, yaw, noCollider) {
   const wx = x + OX;
@@ -607,7 +619,10 @@ function buildTownBusStation() {
   for (let x = -8; x <= 8; x += 4) { Fp.box('wood', 2.4, 0.5, 0.06, x, 0.98, -0.85, 0x7a5a30); }
   townSign(Fp, ['KSRTC BUS STATION', 'Nilambur'], 0, 4.95, 3.3, 9, { bg: '#0b3d91', fg: '#ffffff', border: '#ffd166' });
   townSign(Fp, ['ROUTES', 'Manjeri · Kozhikode · Ooty · Gudalur'], -6.5, 2.4, 2.4, 3.6, { bg: '#1f5a3a', fg: '#fff2cc', border: '#fff2cc', size: 34 });
-  colBox(215, 27, 11, 3);
+  // The boarding platform is a walkable curb, not a wall - step players up onto it (like the
+  // railway platforms do) instead of blocking the whole width of the depot with a solid collider.
+  // (A full-width colBox here used to trap players south of it, unable to reach the bus bays.)
+  GROUND_EXTRAS.push((x, z) => (Math.abs(x - (215 + OX)) < 11 && Math.abs(z - 27) < 2.9) ? TOWN_H + 0.35 : null);
   // Buses in bays facing the platform, autos and bikes at the kerb
   const bc = [0x1c56a6, 0xc0392b, 0x1c56a6, 0xe08a20, 0x1c56a6, 0x2a8a3a];
   for (let i = 0; i < 6; i++) placeVehicle('bus', bc[i], 203 + i * 5.6, 52, Math.PI, false);
