@@ -45,11 +45,31 @@ function rawHeight(x, z) {
   const n = fbm(x * 0.011 + 13, z * 0.011 + 7, 5, 2);
   h += Math.max((n - 0.42) * 34, -1.2) * hillMask * (1 - plain * 0.93);
   h += (fbm(x * 0.06, z * 0.06, 3, 5) - 0.4) * 2.4 * smoothstep(20, 45, ax) * (1 - plain * 0.9);
+  // The Chaliyar's own channel (the lerp toward BANK_H above, keyed only on ax) runs the full length
+  // of the map regardless of z - but the mountain ring/outer rim below are keyed on R = max(ax, |z|),
+  // so without this the rising ring/rim would eventually bury the riverbed as |z| grows, making the
+  // river look like it dead-ends against high ground (reported near Kalikavu Road, the ring's inner
+  // edge starts at R=185 and Kalikavu sits around z=225). A real river cuts a valley through hills
+  // instead of stopping at them, so open a gap through both terms right on the river's line.
+  const riverOpen = 1 - smoothstep(10, 42, ax);
   // Mountain ring around the valley (185-430 m), falling back to lowland by 520 m
   const e = smoothstep(185, 310, R) * (1 - smoothstep(430, 520, R));
-  h += e * e * 70 * (0.55 + fbm(x * 0.02, z * 0.02, 3, 9));
+  h += e * e * 70 * (0.55 + fbm(x * 0.02, z * 0.02, 3, 9)) * (1 - riverOpen);
   const rim = smoothstep(930, 1000, R);
-  h += rim * rim * 110 * (0.6 + fbm(x * 0.02, z * 0.02, 3, 9));
+  h += rim * rim * 110 * (0.6 + fbm(x * 0.02, z * 0.02, 3, 9)) * (1 - riverOpen);
+  // Waterfall highland: Adyanpara's cliff should read as the face of a real hillside rather than an
+  // isolated rock group, so raise a ring of higher ground just past its flattened viewpoint/trail
+  // plateau (FLATS keeps 0-48 units from the landmark flat; this only rises from 48 to 85 units out,
+  // and is back to exactly 0 by 85). That 85-unit cap is deliberate: Conolly's Plot, the next-nearest
+  // landmark, sits 92 units from the falls, and a first attempt at this that didn't cap the radius
+  // ended up reaching 180+ units and distorting terrain as far off as the Canoly Bridge - keep any
+  // future retuning well inside that margin.
+  {
+    const wfp = LANDMARKS.waterfall.pos;
+    const hd = Math.hypot(x - wfp.x, z - wfp.z);
+    const ring = smoothstep(48, 70, hd) * (1 - smoothstep(70, 85, hd));
+    h += ring * 24 * (0.6 + fbm(x * 0.02 + 31, z * 0.02 - 17, 3, 6));
+  }
   return h;
 }
 
@@ -1152,9 +1172,14 @@ function buildAdyanparaWaterfall() {
   g.position.set(p.x, y0, p.z);
 
   const H = 36;
-  g.add(mk(makeRockMass(62, H, 24, 3, 0, 0, true), M.rock, 0, H / 2 - 1, 0));
+  // The main mass is narrower than it used to be (62->48) and the east flank is pushed further out
+  // (42->50) to open a clear 12-unit corridor at local x 24-36 - that's exactly where the railway
+  // (world x = RAIL_X = -70, i.e. local x = RAIL_X - p.x) cuts through this cliff; see
+  // buildRailwayTunnel() below, which bores a real tunnel through that gap instead of letting the
+  // track clip through solid rock.
+  g.add(mk(makeRockMass(48, H, 24, 3, 0, 0, true), M.rock, 0, H / 2 - 1, 0));
   g.add(mk(makeRockMass(26, 27, 22, 8, 0, 0, false), M.rock, -40, 27 / 2 - 1, 3));
-  g.add(mk(makeRockMass(28, 22, 20, 13, 0, 0, false), M.rock, 42, 22 / 2 - 1, 4));
+  g.add(mk(makeRockMass(28, 22, 20, 13, 0, 0, false), M.rock, 50, 22 / 2 - 1, 4));
 
   // Falling water: two layered scrolling streak sheets
   for (let i = 0; i < 2; i++) {
@@ -1229,10 +1254,91 @@ function buildAdyanparaWaterfall() {
   sb.rotation.y = -0.4;
   g.add(sb);
 
+  // ---------- Railway tunnel ----------
+  // The corridor the track actually runs through: bored through the gap opened above between the
+  // (now narrower) main rock and the (now shifted-out) east flank. Only the roof and portals are new
+  // geometry - the corridor itself is just left empty, walled in by the two existing rock masses.
+  {
+    const railLX = RAIL_X - p.x;   // local x of the track inside this group (30)
+    const cHalfW = 6, cZ = 13, floorY = -1, roofY = 8;
+    // Rock roof spanning the gap, tying the two flanks back into one continuous mountain silhouette
+    // (kept a couple of metres under the crest platform built below, so the two don't intersect)
+    g.add(mk(makeRockMass(cHalfW * 2, 21, cZ * 2 + 2, 21, 0, 0, false), M.rock, railLX, roofY + 10.5, 0));
+    // Masonry portals at both mouths (a plain arch frame, in the same stone material as the town's
+    // colonial-era buildings) plus a dark fill so the bore reads as a real shadowed tunnel from outside
+    for (const pz of [-cZ, cZ]) {
+      const frameW = cHalfW * 2 + 2.4, frameH = roofY - floorY + 1.6;
+      g.add(mk(texBox(frameW, frameH, 1.0, 2), M.stone, railLX, (floorY + roofY) / 2, pz, false, true));
+      g.add(mk(texBox(cHalfW * 2, roofY - floorY, 0.6, 2), new THREE.MeshStandardMaterial({ color: 0x0b0906, roughness: 1 }), railLX, (floorY + roofY) / 2, pz - (pz > 0 ? 0.5 : -0.5), false, false));
+    }
+    g.add(mk(new THREE.BoxGeometry(cHalfW * 1.7, roofY - floorY - 1, 3), new THREE.MeshStandardMaterial({ color: 0x0b0906, roughness: 1 }), railLX, (floorY + roofY) / 2, 0, false, false));
+  }
+
+  // ---------- Trail to the spring ----------
+  // A switchback wooden stairway up the east side (beside the pool, clear of both the cascade and the
+  // tunnel corridor), then a short walkway across to the crest, so the spring built above is actually
+  // reachable on foot instead of just visible-but-unconfirmable from the ground. Kept inside roughly a
+  // 26-unit radius of the landmark on purpose: FLATS only guarantees flat terrain that close in, and an
+  // earlier version of this trail that reached 53+ units out landed on wildly uneven natural hillside
+  // (heights swinging from 5 to 36 within 40 units) - confirmed the hard way with a height probe after
+  // the stairs turned out to start 15 metres underground.
+  {
+    const TOP_Y = H - 3.3;   // matches the spring pool's rim height
+    function flight(x0, x1, z, yA, yB) {
+      const run = x1 - x0, rise = yB - yA, len = Math.hypot(run, rise), ang = Math.atan2(rise, run);
+      const mid = { x: (x0 + x1) / 2, y: (yA + yB) / 2 };
+      const deck = mk(texBox(len, 0.14, 2.2, 2), M.wood, mid.x, mid.y, z, false, true);
+      deck.rotation.z = ang;
+      g.add(deck);
+      for (const s of [-1, 1]) {
+        const rail = mk(new THREE.BoxGeometry(len, 0.06, 0.06), M.woodDark, mid.x, mid.y + 0.55, z + s * 1.1);
+        rail.rotation.z = ang;
+        g.add(rail);
+      }
+      const nPost = Math.max(2, Math.round(len / 3.2));
+      for (let i = 0; i <= nPost; i++) {
+        const t = i / nPost, px = lerp(x0, x1, t), py = lerp(yA, yB, t);
+        for (const s of [-1, 1]) g.add(mk(new THREE.CylinderGeometry(0.04, 0.05, 0.6, 6), M.woodDark, px, py + 0.28, z + s * 1.1));
+      }
+      GROUND_EXTRAS.push((wx, wz) => {
+        const lx = wx - p.x, lz = wz - p.z, t = (lx - x0) / run;
+        if (t < -0.03 || t > 1.03 || Math.abs(lz - z) > 1.15) return null;
+        return y0 + lerp(yA, yB, clamp(t, 0, 1)) + 0.08;
+      });
+    }
+    function flatDeck(xc, zc, hw, hd, y) {
+      g.add(mk(texBox(hw * 2, 0.14, hd * 2, 2), M.wood, xc, y, zc, false, true));
+      GROUND_EXTRAS.push((wx, wz) => {
+        const lx = wx - p.x, lz = wz - p.z;
+        if (Math.abs(lx - xc) > hw + 0.2 || Math.abs(lz - zc) > hd + 0.2) return null;
+        return y0 + y + 0.08;
+      });
+    }
+    flight(12, 23, 14, 0, 11);
+    flatDeck(23, 16, 1.4, 1.6, 11);          // landing 1 (turns the direction of travel)
+    flight(23, 12, 18, 11, 22);
+    flatDeck(12, 20, 1.4, 1.6, 22);          // landing 2
+    flight(12, 23, 22, 22, TOP_Y);
+    // Crest viewing deck: kept in a tight z=20-24 band that only overlaps flight 3's own z line (22),
+    // never flights 1/2's rows (14, 18) - GROUND_EXTRAS is a flat x/z->height map with no notion of
+    // "level", so a deck spanning their z rows too would sit directly above them and silently make
+    // them unreachable, since groundHeight always returns the tallest candidate for a given x/z column
+    // (caught this by probing groundHeight along the lower flights after first routing the deck across
+    // all of them). This sits right over the tunnel's rock roof (kept a couple of metres lower, above,
+    // for clearance) - the spring itself is visible from here, just across the summit to the west.
+    flatDeck(29.5, 22, 7.5, 2, TOP_Y);
+    // Base landing + a small marker so the trailhead is easy to spot from the pool
+    flatDeck(12, 12, 2.2, 2.4, 0);
+    const tb = signBoard(['SPRING TRAIL'], { bw: 2.6, size: 30 });
+    tb.position.set(9, 0.6, 11);
+    tb.rotation.y = -2.0;
+    g.add(tb);
+  }
+
   scene.add(g);
-  addBoxCollider(p.x, p.z - 1, 31, 12);
+  addBoxCollider(p.x, p.z - 1, 24, 12);
   addBoxCollider(p.x - 40, p.z + 2, 12, 10);
-  addBoxCollider(p.x + 42, p.z + 3, 13, 9);
+  addBoxCollider(p.x + 50, p.z + 3, 13, 9);
 }
 
 // ---------- Landmark: Railway and Station ----------
