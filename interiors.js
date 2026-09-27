@@ -1113,7 +1113,7 @@ CIVIC.bank = function (c) {
   A.col(0, 0, 0.35, 0.3);
   const V = sub(R, 0, -hd + 0.05, 0);
   V.box('metal', 2.0, 2.2, 0.1, 0, 1.1, 0, 0x6a7278); V.cyl('metal', 0.7, 0.7, 0.12, 0, 1.2, 0.06, 0x9aa0a6, 20, Math.PI / 2); V.cyl('metal', 0.12, 0.12, 0.18, 0, 1.2, 0.12, 0xc0c4c8, 10, Math.PI / 2);
-  addSpot(A, 0, 0, 0.9, '🏧', 'Use the ATM', () => ['ATM', 'Your account balance is ' + rupees(0) + '. Nilambur runs on cash - you have ' + fmtRs(econ.cash) + ' in your pocket. Earn more from the 💼 Jobs board.'], 1.4);
+  addSpot(A, 0, 0, 0.9, '🏧', 'Use the ATM', () => (typeof ADS !== 'undefined' && ADS.enabled) ? (atmWithAds(), null) : ['ATM', 'Your account balance is ' + rupees(0) + '. Nilambur runs on cash - you have ' + fmtRs(econ.cash) + ' in your pocket. Earn more from the 💼 Jobs board.'], 1.4);
   addSpot(R, -1.0, 0, 0.4, '🏦', 'Talk to the cashier', () => ['Nilambur Co-op Bank', 'Fixed deposit rate 7.5% for one year. "Locker available on the first floor - bring two photos and your Aadhaar."'], 1.6);
   ceilingFan(R, 0, ch, 1.5);
 };

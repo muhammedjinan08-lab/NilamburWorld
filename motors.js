@@ -345,6 +345,7 @@ function buildHelipad() {
 }
 function heliBoard(v) {
   if (v.paid) return true;
+  if (typeof ADS !== 'undefined' && ADS.enabled) { heliChoice(v, HELI_FEE); return false; }   // pay, or watch an ad for a free flight (ads.js)
   if (!spendCash(HELI_FEE)) { triggerLandmarkPopup('🚁 Flight fee ' + fmtRs(HELI_FEE), 'You have ' + fmtRs(econ.cash) + ' cash. Earn money from the 💼 Jobs board, then come back for your joy ride.'); return false; }
   v.paid = true;
   return true;

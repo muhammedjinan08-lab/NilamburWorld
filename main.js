@@ -1935,6 +1935,7 @@ function setupEventListeners() {
         state.playerPos.x = x; state.playerPos.y = g; state.playerPos.z = z;
         state.playerVelocity.y = 0; state.isGrounded = true;
         camRig.yaw = 0;
+        if (typeof showInterstitial === 'function') showInterstitial('fast_travel', 'browse');   // natural pause (ads.js)
       }
     });
   });
@@ -2322,6 +2323,7 @@ function tryExitTrain() {
   state.playerVelocity.y = 0; state.isGrounded = true;
   camRig.distTarget = camRig._savedDist || 16;
   triggerLandmarkPopup('🚉 ' + st.name, 'You got off the train. Press E near the train when it stops here again to ride on.');
+  if (typeof showInterstitial === 'function') setTimeout(() => showInterstitial('after_train', 'next'), 1500);   // natural pause (ads.js)
 }
 
 function updateRidingTrain(dt) {

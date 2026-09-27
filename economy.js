@@ -251,7 +251,7 @@ function shopSpot(T, lx, lz, icon, label, key, r, name) {
 let _shopOpen = null, _cart = {}, _shopMsg = '', _bagOpen = false, _jobsOpen = false;
 const $ = (id) => document.getElementById(id);
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
-function econModalOpen() { return !!(_shopOpen || _bagOpen || _jobsOpen || document.querySelector('#garage-modal.open')); }
+function econModalOpen() { return !!(_shopOpen || _bagOpen || _jobsOpen || document.querySelector('#garage-modal.open, #adchoice-modal.open') || (typeof ADS !== 'undefined' && ADS.playing)); }
 function closeEconModals() {
   _shopOpen = null; _bagOpen = false; _jobsOpen = false;
   ['shop-modal', 'bag-modal', 'jobs-modal', 'garage-modal'].forEach(id => { const m = $(id); if (m) m.classList.remove('open'); });
@@ -281,6 +281,13 @@ function renderShop() {
     nm.appendChild(el('small', '', meta + (i.kind === 'big' ? ' · home delivery' : '')));
     row.appendChild(nm);
     row.appendChild(el('span', 'shop-price', i.price ? fmtRs(i.price) : 'free'));
+    if (i.left <= 0 && i.kind !== 'svc' && typeof ADS !== 'undefined' && ADS.enabled) {   // sold out: restock it now by watching an ad (ads.js)
+      const r = el('button', 'btn-teleport btn-use btn-ad', '▶ Restock'); r.type = 'button'; r.title = 'Watch a short ad to restock this item now';
+      r.onclick = () => restockWithAd(s, i, renderShop);
+      row.appendChild(r);
+      list.appendChild(row);
+      continue;
+    }
     const q = _cart[i.id] || 0;
     const step = el('div', 'shop-step');
     const minus = el('button', 'btn-step', '−'); minus.type = 'button'; minus.disabled = q <= 0;
@@ -502,6 +509,14 @@ function openJobs() { fillOffers(); openModal('jobs-modal'); _jobsOpen = true; r
 function renderJobs() {
   const list = $('jobs-list'); list.textContent = '';
   $('jobs-cash').textContent = 'Cash in hand: ' + fmtRs(econ.cash) + ' · jobs done: ' + (econ.jobsDone || 0);
+  if (typeof ADS !== 'undefined' && ADS.enabled) {   // rewarded ad for quick cash (ads.js)
+    const left = adCashLeft(), card = el('div', 'job-card ad-card');
+    card.appendChild(el('div', 'job-title', '📺 Short on cash?'));
+    card.appendChild(el('div', 'job-desc', left > 0 ? 'Watch a short ad and get ' + fmtRs(ADS_CONFIG.rewardCash) + ' cash straight away (' + left + ' left this hour).' : "You've used this hour's ad rewards - take a job instead!"));
+    const b = el('button', 'btn-teleport btn-ad', '▶ Watch a short ad for ' + fmtRs(ADS_CONFIG.rewardCash)); b.type = 'button'; b.disabled = left <= 0;
+    b.onclick = () => watchAdForCash('jobs');
+    card.appendChild(b); list.appendChild(card);
+  }
   if (JOBS.active) {
     const a = JOBS.active, row = el('div', 'job-card active');
     row.appendChild(el('div', 'job-title', a.icon + ' ' + a.title + ' - in progress'));

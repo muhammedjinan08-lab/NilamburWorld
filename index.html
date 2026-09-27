@@ -105,6 +105,7 @@
         <button class="btn-teleport" data-location="football">⚽ Football Ground</button>
       </div>
     </div>
+    <div class="widget-box glass-panel ad-slot ad-menu" data-ad="menu"></div>
   </aside>
 
   <!-- Right Sidebar: Minimap & Weather Controls -->
@@ -238,6 +239,7 @@
         <button type="button" class="btn-teleport" id="name-offline">Play offline</button>
       </div>
     </form>
+    <aside class="ad-slot ad-side" data-ad="start"></aside>
   </div>
 
   <!-- Shop counter (economy.js) -->
@@ -265,6 +267,16 @@
       </div>
       <div id="bag-list" class="shop-list"></div>
       <div id="bag-msg" class="shop-msg"></div>
+      <div class="ad-slot ad-strip" data-ad="bag"></div>
+    </div>
+  </div>
+
+  <!-- Ad choice (ads.js): helicopter fee / ATM -->
+  <div class="modal-overlay" id="adchoice-modal">
+    <div class="modal-box glass-panel econ-box adchoice-box">
+      <h2 id="adchoice-title"></h2>
+      <p id="adchoice-text" class="econ-sub"></p>
+      <div id="adchoice-buttons" class="adchoice-buttons"></div>
     </div>
   </div>
 
@@ -289,6 +301,7 @@
       </div>
       <p class="econ-sub">Everything in Nilambur is paid for in cash. Take a job, follow the yellow beam, and get paid when it's done.</p>
       <div id="jobs-list" class="jobs-list"></div>
+      <div class="ad-slot ad-strip" data-ad="jobs"></div>
     </div>
   </div>
 
@@ -341,6 +354,7 @@
         <span><i class="map-dot" style="background:#FFD54F"></i> Friend</span>
         <span><i class="map-dot" style="background:#00E676;border:2px solid #fff"></i> You</span>
       </div>
+      <div class="ad-slot ad-strip" data-ad="map"></div>
     </div>
   </div>
 
@@ -352,6 +366,7 @@
   <script src="economy.js"></script>
   <script src="motors.js"></script>
   <script src="football.js"></script>
+  <script src="ads.js"></script>
   <script src="mobile.js"></script>
   <script src="main.js"></script>
   <script src="multiplayer.js"></script>

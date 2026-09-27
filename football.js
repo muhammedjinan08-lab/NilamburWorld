@@ -159,6 +159,9 @@ function onFootballMsg(m) {
     fbToast('🏁 Full time: ' + res, m.sc[0] + ' : ' + m.sc[1] + (m.reason === 'forfeit' ? ' (a team ran out of players)' : '') + '. Next match starts with the players in the queue.');
     const mine = (m.a || []).includes(me) ? 0 : (m.b || []).includes(me) ? 1 : -1;
     if (mine >= 0 && typeof earnCash === 'function') earnCash(m.winner < 0 ? 200 : m.winner === mine ? 300 : 120);   // match fee
+    // the full-time pause is a natural break (ads.js rate-limits these)
+    const p = state.playerPos;
+    if (typeof showInterstitial === 'function' && (mine >= 0 || Math.hypot(p.x - FB.cx, p.z - FB.cz) < 60)) setTimeout(() => showInterstitial('football_full_time', 'next'), 3000);
   }
 }
 function fbToast(title, text) { if (typeof triggerLandmarkPopup === 'function') triggerLandmarkPopup(title, text); }

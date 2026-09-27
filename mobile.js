@@ -34,6 +34,9 @@ window.touchAxis = { x: 0, y: 0 };   // joystick, -1..1 (y down = backwards)
   menu.type = 'button'; menu.title = 'Panels, quests, fast travel, chat';
   menu.addEventListener('click', () => document.body.classList.toggle('menu-open'));
   document.body.appendChild(menu);
+  // In the drawer, chat scrolls with the other panels (above the menu's ad unit) instead of floating over them
+  const side = document.getElementById('left-sidebar'), chatBox = document.getElementById('chat-box');
+  if (side && chatBox) side.insertBefore(chatBox, side.querySelector('.ad-menu'));
   // Tapping the world closes the drawer
   document.getElementById('canvas-container').addEventListener('touchstart', () => document.body.classList.remove('menu-open'), { passive: true });
   // Fast travel from the drawer should close it too
