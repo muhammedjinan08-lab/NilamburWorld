@@ -1104,6 +1104,7 @@ function animate() {
   if (typeof updateSpotPrompt === 'function') updateSpotPrompt();
   if (typeof econTick === 'function') econTick(dt);
   if (typeof motorsTick === 'function') motorsTick(dt);
+  if (typeof footballTick === 'function') footballTick(dt);
   updateEngineAudio();
   updateCamera(dt);
   updateEnvironment(dt, false);
@@ -1175,6 +1176,8 @@ function updatePlayerMovement(dt) {
   let speed = sprint ? 17 : 8;
   // Indoors, slow to a real walking pace - at outdoor game speed you'd cross a 10 m shop in a second
   if (typeof roomAt === 'function' && roomAt(parent.position.x, parent.position.y, parent.position.z)) speed = sprint ? 4.5 : 2.6;
+  // ...and a footballer's pace during a match (football.js)
+  if (typeof footballSpeed === 'function') { const fsp = footballSpeed(sprint); if (fsp) speed = fsp; }
 
   let inF = 0, inR = 0;
   if (keyState['KeyW'] || keyState['ArrowUp']) inF += 1;
@@ -1298,15 +1301,17 @@ function checkLandmarkProximity() {
 
     if (dist < lm.radius && !state.discoveredLocations.has(key)) {
       state.discoveredLocations.add(key);
-      triggerLandmarkPopup(lm.name, lm.desc);
+      triggerLandmarkPopup(lm.name, lm.desc, '📍 DISCOVERED LANDMARK');
       completeQuest(lm.questId);
     }
   }
 }
 
 let popupTimer = null;
-function triggerLandmarkPopup(title, desc) {
+// `kicker` is the small header line; only real landmark discoveries say "discovered landmark"
+function triggerLandmarkPopup(title, desc, kicker) {
   const popup = document.getElementById('location-popup');
+  const k = popup.querySelector('p'); if (k) k.innerText = kicker || '📣 NILAMBUR WORLD';
   document.getElementById('popup-title').innerText = title;
   document.getElementById('popup-desc').innerText = desc;
 
@@ -2200,7 +2205,7 @@ function interactNearest() {
     const d = Math.hypot(state.playerPos.x - lm.pos.x, state.playerPos.z - lm.pos.z);
     if (d < bd) { bd = d; best = lm; }
   }
-  if (best && bd < best.radius * 1.4) triggerLandmarkPopup(best.name, best.desc);
+  if (best && bd < best.radius * 1.4) triggerLandmarkPopup(best.name, best.desc, '📍 LANDMARK');
 }
 
 // Load Godot Files Into Inspector Modal

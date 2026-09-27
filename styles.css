@@ -799,3 +799,22 @@ body, html {
 .garage-swatch { width: 30px; height: 30px; border-radius: 8px; border: 2px solid rgba(255, 255, 255, 0.25); cursor: pointer; }
 .garage-swatch.on { border-color: #fff; box-shadow: 0 0 0 2px var(--accent-gold); }
 .garage-swatch.neon { box-shadow: 0 0 10px currentColor; }
+
+/* ---------- Football ground (football.js) ---------- */
+#fb-panel { position: fixed; right: 22px; bottom: 230px; width: 270px; padding: 12px 14px; border-radius: 14px; z-index: 26; display: none; font-size: 12.5px; color: var(--text-main); }
+#fb-panel.show { display: block; }
+.fb-title { font-weight: 800; color: var(--primary-emerald); margin-bottom: 6px; }
+.fb-status { margin-bottom: 6px; }
+.fb-teams { display: flex; gap: 8px; margin-bottom: 6px; }
+.fb-team { flex: 1; border-left: 3px solid; padding-left: 6px; font-size: 12px; }
+.fb-qh { font-weight: 700; color: var(--text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.fb-queue { margin: 4px 0 8px 18px; max-height: 120px; overflow-y: auto; }
+.fb-empty { list-style: none; margin-left: -18px; color: var(--text-muted); }
+.fb-me { color: var(--accent-gold); font-weight: 700; }
+#fb-join { width: 100%; }
+.fb-keys { margin-top: 8px; font-size: 11.5px; line-height: 2; }
+#fb-hud { position: fixed; left: 50%; top: 148px; transform: translateX(-50%); padding: 7px 16px; border-radius: 12px; font-size: 15px; font-weight: 800; color: var(--text-main); z-index: 30; display: none; white-space: nowrap; }
+#fb-hud.show { display: block; }
+#fb-charge { position: fixed; left: 50%; bottom: 175px; transform: translateX(-50%); width: 220px; height: 14px; padding: 3px; border-radius: 8px; z-index: 30; display: none; }
+#fb-charge.show { display: block; }
+#fb-charge div { height: 100%; width: 0; border-radius: 5px; background: linear-gradient(90deg, #00e676, #ffd54f, #ff5252); }

@@ -27,7 +27,7 @@ const MIME = {
   '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
   '.gd': 'text/plain; charset=utf-8', '.godot': 'text/plain; charset=utf-8', '.tscn': 'text/plain; charset=utf-8'
 };
-const BLOCKED = /^\/(data|node_modules|server\.js|package(-lock)?\.json)(\/|$)/i;
+const BLOCKED = /^\/(data|node_modules|server\.js|football_server\.js|package(-lock)?\.json)(\/|$)/i;
 
 const httpServer = http.createServer((req, res) => {
   let p;
@@ -111,6 +111,9 @@ function releaseVehicle(me) {
 
 function send(ws, obj) { if (ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 function sendTo(key, obj) { const s = sessions.get(key); if (s) send(s.ws, obj); }
+
+// The football ground (queue, teams, ball physics, 7-minute matches) - see football_server.js
+const football = require('./football_server.js').createFootball(sessions, send);
 function nameOf(k) { return users[k] ? users[k].name : k; }
 
 function socialFor(key) {
@@ -140,7 +143,7 @@ function allow(s, cost, refillPerSec, cap) {
 const wss = new WebSocketServer({ server: httpServer, path: '/ws', maxPayload: 4096 });
 
 // Abuse limits for public hosting (behind a host's proxy the client address arrives in a header)
-const MAX_CONN_PER_IP = 10, MAX_NEW_ACCOUNTS_PER_IP_HOUR = 6, MAX_USERS = 5000;
+const MAX_CONN_PER_IP = +process.env.MAX_CONN_PER_IP || 10, MAX_NEW_ACCOUNTS_PER_IP_HOUR = +process.env.NEW_ACCOUNT_LIMIT || 6, MAX_USERS = 5000;
 const connsByIp = new Map();
 const newAccountsByIp = new Map();
 function clientIp(req) {
@@ -314,6 +317,8 @@ wss.on('connection', (ws, req) => {
         if (me.veh === m.i) releaseVehicle(me);
         break;
       }
+      default:
+        if (m.t.startsWith('fb_') && allow(me, 1, 10, 20)) football.handle(me, m);
     }
   });
 
@@ -321,6 +326,7 @@ wss.on('connection', (ws, req) => {
     if (me && sessions.get(me.key) && sessions.get(me.key).ws === ws) {
       sessions.delete(me.key);
       releaseVehicle(me);
+      football.onClose(me);
       pushSocialToFriends(me.key);
       posDirty = true;
     }

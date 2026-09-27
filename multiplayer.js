@@ -118,6 +118,7 @@
   // ------------------------------------------------------------------ socket
   let ws = null, retry = 0, retryTimer = null, wantOnline = false, creds = null, everConnected = false, attempts = 0;
   function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+  NW.send = send;   // football.js
 
   // Where is the game server? ?server=wss://host/ws overrides; the game's own host is used when it runs
   // server.js; a static host (GitHub Pages) looks for a published server.json {"url": "wss://host/ws"}.
@@ -219,6 +220,7 @@
       case 'players': updateRemote(m.list); break;
       case 'appearances': (m.list || []).forEach(a => updateRemoteAppearance(a.n, a.ap)); break;
       case 'vehicles': updateRemoteVehicles(m.list); break;
+      case 'fb': case 'fb_event': if (typeof onFootballMsg === 'function') onFootballMsg(m); break;
       case 'veh_denied':
         // Raced with someone else for the same vehicle and lost - back out of it locally too.
         if (typeof state !== 'undefined' && state.driving && typeof VEHICLES !== 'undefined' && VEHICLES.indexOf(state.driving) === m.i) {
