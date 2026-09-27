@@ -1103,6 +1103,7 @@ function animate() {
   updatePlayerMovement(dt);
   if (typeof updateSpotPrompt === 'function') updateSpotPrompt();
   if (typeof econTick === 'function') econTick(dt);
+  if (typeof motorsTick === 'function') motorsTick(dt);
   updateEngineAudio();
   updateCamera(dt);
   updateEnvironment(dt, false);
@@ -1752,6 +1753,7 @@ function setupEventListeners() {
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     if (e.code === 'KeyE' && !e.repeat) interactNearest();
     if (e.code === 'KeyR' && !e.repeat) toggleRideVehicle();
+    if (e.code === 'KeyG' && !e.repeat && typeof tryGarage === 'function') tryGarage();
   });
   window.addEventListener('keyup', (e) => { keyState[e.code] = false; });
   window.addEventListener('blur', () => { for (const k in keyState) keyState[k] = false; });
@@ -1851,7 +1853,8 @@ const VEH_SPECS = {
   bike: { max: 28, acc: 20, turn: 2.9, camDist: 11 },
   bus: { max: 15, acc: 7, turn: 1.0, camDist: 22 },
   auto: { max: 18, acc: 12, turn: 2.3, camDist: 12 },
-  kayak: { max: 7, acc: 5, turn: 2.0, camDist: 8 }
+  kayak: { max: 7, acc: 5, turn: 2.0, camDist: 8 },
+  heli: { max: 45, acc: 9, turn: 1.1, camDist: 20 }
 };
 const ENTER_RANGE = 3.5;
 // Open vehicles (no cabin hiding the driver) keep the avatar visible, seated in a pose fitting the
@@ -1997,6 +2000,7 @@ function updateRiding(dt) {
 function tryEnterVehicle() {
   const v = nearestFreeVehicle();
   if (!v) return false;
+  if (v.type === 'heli' && typeof heliBoard === 'function' && !heliBoard(v)) return true;   // flight fee (motors.js)
   enterVehicle(v);
   return true;
 }
@@ -2022,14 +2026,17 @@ function enterVehicle(v) {
   camRig._savedDist = camRig.distTarget;
   camRig.distTarget = (VEH_SPECS[v.type] || VEH_SPECS.car).camDist;
   camRig.yaw = v.yaw + Math.PI;   // snap straight in behind it - see updateCamera for the ongoing lock
-  const icon = v.type === 'bus' ? '🚌' : v.type === 'bike' ? '🏍️' : v.type === 'auto' ? '🛺' : v.type === 'kayak' ? '🛶' : '🚗';
-  const hint = v.type === 'kayak' ? 'WASD to paddle, E to get out - beach it anywhere on the shore.' : 'WASD to steer, SPACE to brake, E to get out.';
-  triggerLandmarkPopup(icon + (v.type === 'kayak' ? ' Kayaking' : ' Driving'), hint);
+  const icon = v.type === 'bus' ? '🚌' : v.type === 'bike' ? '🏍️' : v.type === 'auto' ? '🛺' : v.type === 'kayak' ? '🛶' : v.type === 'heli' ? '🚁' : '🚗';
+  const hint = v.type === 'kayak' ? 'WASD to paddle, E to get out - beach it anywhere on the shore.'
+    : v.type === 'heli' ? 'SPACE to climb, SHIFT to descend, W/S to fly forward/back, A/D to turn. Land, then E to get out.'
+    : 'WASD to steer, SPACE to brake, SHIFT for nitro (if fitted), E to get out. Drive into the garage and press G to modify.';
+  triggerLandmarkPopup(icon + (v.type === 'kayak' ? ' Kayaking' : v.type === 'heli' ? ' Flying' : ' Driving'), hint);
 }
 
 function exitVehicle() {
   const v = state.driving;
   if (!v) return;
+  if (typeof canExitVehicle === 'function' && !canExitVehicle(v)) return;   // e.g. a helicopter still in the air
   v.occupied = false;
   v.spd = 0;
   v.collider = addCircleCollider(v.x, v.z, v.radius);
@@ -2047,15 +2054,18 @@ function exitVehicle() {
 
 function updateVehicleDriving(dt) {
   const v = state.driving;
-  const s = VEH_SPECS[v.type] || VEH_SPECS.car;
+  if (v.type === 'heli') { updateHeli(v, dt); return; }   // motors.js
+  // Garage upgrades (engine stage, nitro) adjust the base spec - see motors.js
+  const s = typeof vehicleSpec === 'function' ? vehicleSpec(v, dt) : (VEH_SPECS[v.type] || VEH_SPECS.car);
   let inF = 0, inR = 0;
   if (keyState['KeyW'] || keyState['ArrowUp']) inF += 1;
   if (keyState['KeyS'] || keyState['ArrowDown']) inF -= 1;
   if (keyState['KeyD'] || keyState['ArrowRight']) inR -= 1;
   if (keyState['KeyA'] || keyState['ArrowLeft']) inR += 1;
 
-  if (keyState['Space']) v.spd += (0 - v.spd) * Math.min(1, dt * 6);
-  else if (inF > 0) v.spd = Math.min(s.max, v.spd + s.acc * dt);
+  if (v.air) v.spd *= 1 - dt * 0.02;   // airborne: only air drag - brakes and throttle do nothing
+  else if (keyState['Space']) v.spd += (0 - v.spd) * Math.min(1, dt * 6);
+  else if (inF > 0) v.spd = v.spd > s.max ? v.spd + (s.max - v.spd) * Math.min(1, dt * 1.5) : Math.min(s.max, v.spd + s.acc * dt);   // (above max = nitro wearing off)
   else if (inF < 0) v.spd = Math.max(-s.max * 0.5, v.spd - s.acc * dt);
   else v.spd += (0 - v.spd) * Math.min(1, dt * 1.6);
 
@@ -2100,21 +2110,28 @@ function updateVehicleDriving(dt) {
   const lim = WORLD_SIZE / 2 - 10;
   v.x = clamp(v.x, -lim, lim); v.z = clamp(v.z, -lim, lim);
 
+  // Flying high over a jump clears walls and parked cars (colliders are 2D footprints)
+  const highUp = v.air && v.y - groundHeight(v.x, v.z) > 5;
   const pos = { x: v.x, z: v.z };
-  resolveCollisions(pos, v.radius);
-  resolveVehicleCollisions(pos, v.radius, v);
-  if (Math.abs(pos.x - v.x) > 1e-4 || Math.abs(pos.z - v.z) > 1e-4) v.spd *= 0.55;
+  if (!highUp) {
+    resolveCollisions(pos, v.radius);
+    resolveVehicleCollisions(pos, v.radius, v);
+    if (Math.abs(pos.x - v.x) > 1e-4 || Math.abs(pos.z - v.z) > 1e-4) v.spd *= 0.55;
+  }
   v.x = pos.x; v.z = pos.z;
 
   const gy = groundHeight(v.x, v.z);
-  v.g.position.set(v.x, gy + ROAD_Y, v.z);
+  // Real vertical motion: speed carried over a crest launches the vehicle into the air (motors.js)
+  const vy = typeof vehicleVertical === 'function' ? vehicleVertical(v, dt, gy + ROAD_Y) : gy + ROAD_Y;
+  v.g.position.set(v.x, vy, v.z);
   v.g.rotation.y = v.yaw;
 
   const riderY = RIDER_SEAT_Y[v.type] !== undefined ? RIDER_SEAT_Y[v.type] : 1.0;
   const parent = playerMesh.parent;
-  parent.position.set(v.x, gy + riderY, v.z);
+  const seatY = vy - ROAD_Y + riderY;
+  parent.position.set(v.x, seatY, v.z);
   if (RIDER_VISIBLE_TYPES[v.type]) playerMesh.rotation.y = v.yaw;
-  state.playerPos.x = v.x; state.playerPos.y = gy + riderY; state.playerPos.z = v.z;
+  state.playerPos.x = v.x; state.playerPos.y = seatY; state.playerPos.z = v.z;
   camRig.idleTime = 0;
   updateCoordsPanel();
 }

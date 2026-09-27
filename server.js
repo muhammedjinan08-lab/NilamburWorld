@@ -301,7 +301,13 @@ wss.on('connection', (ws, req) => {
         const x = +m.x, z = +m.z, yaw = +m.yaw, spd = +m.spd;
         if (![x, z, yaw, spd].every(Number.isFinite) || Math.abs(x) > 1200 || Math.abs(z) > 1200) return;
         const rec = vehicleDrivers.get(me.veh);
-        if (rec) { rec.x = x; rec.z = z; rec.yaw = yaw; rec.spd = spd; vehDirty = true; }
+        if (rec) {
+          rec.x = x; rec.z = z; rec.yaw = yaw; rec.spd = spd; vehDirty = true;
+          // optional: altitude (jumps / helicopters) and garage paint + upgrade flags
+          const y = +m.y; rec.y = Number.isFinite(y) && Math.abs(y) < 2000 ? y : undefined;
+          const c = m.c | 0, f = m.f | 0, nc = m.nc | 0;
+          if (m.c !== undefined && c >= 0 && c <= 0xffffff && f >= 0 && f < 16 && nc >= 0 && nc <= 0xffffff) { rec.c = c; rec.f = f; rec.nc = nc; }
+        }
         break;
       }
       case 'vehexit': {
@@ -327,7 +333,12 @@ setInterval(() => {
   if (vehDirty) {
     vehDirty = false;
     const vlist = [];
-    vehicleDrivers.forEach((rec, i) => vlist.push({ i: i, n: rec.name, x: +rec.x.toFixed(2), z: +rec.z.toFixed(2), yaw: +rec.yaw.toFixed(2), spd: +rec.spd.toFixed(2) }));
+    vehicleDrivers.forEach((rec, i) => {
+      const o = { i: i, n: rec.name, x: +rec.x.toFixed(2), z: +rec.z.toFixed(2), yaw: +rec.yaw.toFixed(2), spd: +rec.spd.toFixed(2) };
+      if (rec.y !== undefined) o.y = +rec.y.toFixed(2);
+      if (rec.c !== undefined) { o.c = rec.c; o.f = rec.f; o.nc = rec.nc; }
+      vlist.push(o);
+    });
     sessions.forEach(s => send(s.ws, { t: 'vehicles', list: vlist }));
   }
   if (appearanceDirty) {

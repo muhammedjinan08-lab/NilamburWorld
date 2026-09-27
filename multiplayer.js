@@ -375,8 +375,10 @@
       }
       v.occupied = true;
       v.x = rv.x; v.z = rv.z; v.yaw = rv.yaw; v.spd = rv.spd;
-      const gy = v.type === 'kayak' ? WATER_Y + 0.16 : groundHeight(v.x, v.z) + ROAD_Y;
+      const gy = v.type === 'kayak' ? WATER_Y + 0.16 : (rv.y !== undefined ? rv.y : groundHeight(v.x, v.z) + ROAD_Y);
+      if (rv.y !== undefined) v.y = rv.y;
       v.g.position.set(v.x, gy, v.z);
+      if (typeof applyRemoteMods === 'function') applyRemoteMods(v, rv);
       v.g.rotation.y = v.yaw;
     });
     NW.remoteVehicles.forEach((rv, i) => {
@@ -425,7 +427,11 @@
     if (sendTimer < 0.1) return;
     if (lastVehIndex >= 0 && state.driving) {
       const v = state.driving;
-      send({ t: 'vehpos', i: lastVehIndex, x: +v.x.toFixed(2), z: +v.z.toFixed(2), yaw: +v.yaw.toFixed(2), spd: +v.spd.toFixed(2) });
+      const msg = { t: 'vehpos', i: lastVehIndex, x: +v.x.toFixed(2), z: +v.z.toFixed(2), yaw: +v.yaw.toFixed(2), spd: +v.spd.toFixed(2) };
+      // altitude (jumps, helicopters) and garage upgrades (motors.js)
+      if (v.y !== undefined) msg.y = +v.y.toFixed(2);
+      if (typeof modFlags === 'function' && v.type !== 'heli') { const m = v.mods || {}; msg.c = m.c !== undefined ? m.c : (v.hex || 0); msg.f = modFlags(v); msg.nc = m.neon || 0; }
+      send(msg);
     }
     const p = playerMesh.parent.position;
     const moving = Math.hypot(p.x - last.x, p.z - last.z) / sendTimer > 0.6;

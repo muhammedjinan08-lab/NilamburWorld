@@ -589,7 +589,7 @@ function placeVehicle(type, hex, x, z, yaw, noCollider) {
     g.rotation.y = yaw;
     const radius = VEH_RADIUS[type];
     const collider = noCollider ? null : colCirc(x, z, radius);
-    VEHICLES.push({ type: type, g: g, x: wx, z: z, yaw: yaw, spd: 0, collider: collider, radius: radius, mover: null, occupied: false });
+    VEHICLES.push({ type: type, hex: hex, g: g, x: wx, z: z, yaw: yaw, spd: 0, collider: collider, radius: radius, mover: null, occupied: false });
     return;
   }
   const M4 = new THREE.Matrix4().compose(new THREE.Vector3(wx, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)), new THREE.Vector3(1, 1, 1));
@@ -1005,7 +1005,7 @@ function buildTownVehicles(rng) {
       // re-reads the live transform at that moment).
       const lx = m.axis === 'x' ? m.pos : m.fixed, lz = m.axis === 'z' ? m.pos : m.fixed;
       const yaw = m.axis === 'z' ? (m.dir > 0 ? 0 : Math.PI) : (m.dir > 0 ? Math.PI / 2 : -Math.PI / 2);
-      VEHICLES.push({ type: m.t, g: m.g, x: lx + OX, z: lz, yaw: yaw, spd: 0, collider: null, radius: VEH_RADIUS[m.t], mover: m, occupied: false });
+      VEHICLES.push({ type: m.t, hex: m.c, g: m.g, x: lx + OX, z: lz, yaw: yaw, spd: 0, collider: null, radius: VEH_RADIUS[m.t], mover: m, occupied: false });
     }
   });
 }
@@ -1099,6 +1099,10 @@ function buildNilamburTown() {
   buildTownTrees(rng);
   buildTownVehicles(rng);
   buildTownPeople(rng);
+  // Garage, helipad (motors.js) and the football ground (football.js) - appended after the town's own
+  // vehicles so every client still agrees on VEHICLES indices
+  if (typeof buildMotorsExtras === 'function') buildMotorsExtras();
+  if (typeof buildFootballGround === 'function') buildFootballGround();
   flushTownBatches();
   ANIM.townUpdate = updateTown;
 }

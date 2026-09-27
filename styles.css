@@ -787,3 +787,15 @@ body, html {
 .job-card .btn-teleport { align-self: flex-start; }
 #job-hud { position: fixed; left: 50%; top: 104px; transform: translateX(-50%); padding: 8px 16px; border-radius: 12px; font-size: 13px; font-weight: 600; color: var(--text-main); z-index: 30; max-width: min(640px, 90vw); text-align: center; display: none; }
 #job-hud.show { display: block; }
+
+/* ---------- Vehicles: speedometer, garage (motors.js) ---------- */
+#speedo { position: fixed; right: 22px; bottom: 22px; width: 190px; height: 190px; z-index: 25; pointer-events: none; opacity: 0; transition: opacity 0.25s; }
+#speedo.show { opacity: 1; }
+#garage-prompt { position: fixed; left: 50%; bottom: 128px; transform: translate(-50%, 12px); padding: 8px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; color: var(--text-main); opacity: 0; pointer-events: none; transition: opacity 0.18s ease, transform 0.18s ease; z-index: 30; white-space: nowrap; }
+#garage-prompt.show { opacity: 1; transform: translate(-50%, 0); }
+#garage-prompt .key-badge { margin-right: 6px; }
+.garage-h { font-size: 13px; font-weight: 700; color: var(--primary-emerald); margin: 10px 0 2px; }
+.garage-swatches { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 2px; }
+.garage-swatch { width: 30px; height: 30px; border-radius: 8px; border: 2px solid rgba(255, 255, 255, 0.25); cursor: pointer; }
+.garage-swatch.on { border-color: #fff; box-shadow: 0 0 0 2px var(--accent-gold); }
+.garage-swatch.neon { box-shadow: 0 0 10px currentColor; }

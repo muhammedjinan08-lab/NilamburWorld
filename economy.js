@@ -251,10 +251,10 @@ function shopSpot(T, lx, lz, icon, label, key, r, name) {
 let _shopOpen = null, _cart = {}, _shopMsg = '', _bagOpen = false, _jobsOpen = false;
 const $ = (id) => document.getElementById(id);
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
-function econModalOpen() { return !!(_shopOpen || _bagOpen || _jobsOpen); }
+function econModalOpen() { return !!(_shopOpen || _bagOpen || _jobsOpen || document.querySelector('#garage-modal.open')); }
 function closeEconModals() {
   _shopOpen = null; _bagOpen = false; _jobsOpen = false;
-  ['shop-modal', 'bag-modal', 'jobs-modal'].forEach(id => { const m = $(id); if (m) m.classList.remove('open'); });
+  ['shop-modal', 'bag-modal', 'jobs-modal', 'garage-modal'].forEach(id => { const m = $(id); if (m) m.classList.remove('open'); });
 }
 function openModal(id) {
   closeEconModals();
@@ -726,7 +726,7 @@ window.addEventListener('DOMContentLoaded', () => {
   on('btn-wallet', openBag);
   on('btn-jobs', openJobs);
   on('shop-pay', payShop);
-  ['shop-close', 'bag-close', 'jobs-close'].forEach(id => on(id, closeEconModals));
-  ['shop-modal', 'bag-modal', 'jobs-modal'].forEach(id => { const m = $(id); if (m) m.addEventListener('mousedown', (e) => { if (e.target === m) closeEconModals(); }); });
+  ['shop-close', 'bag-close', 'jobs-close', 'garage-close'].forEach(id => on(id, closeEconModals));
+  ['shop-modal', 'bag-modal', 'jobs-modal', 'garage-modal'].forEach(id => { const m = $(id); if (m) m.addEventListener('mousedown', (e) => { if (e.target === m) closeEconModals(); }); });
   refreshEconUI();
 });
