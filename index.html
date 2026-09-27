@@ -26,6 +26,13 @@
       </div>
     </div>
     <div class="header-actions">
+      <button class="btn-icon" id="btn-wallet" title="Your cash and your bag">
+        <span>💰</span> <span id="wallet-amt">₹0</span> <span id="bag-count" class="bag-count"></span>
+        <span id="wallet-flash" class="wallet-flash"></span>
+      </button>
+      <button class="btn-icon" id="btn-jobs" title="Take a job to earn cash">
+        <span>💼</span> Jobs
+      </button>
       <button class="btn-icon" id="btn-my-character" title="Change your name and appearance">
         <span>👤</span> My Character
       </button>
@@ -43,6 +50,7 @@
 
   <!-- Location Discovered Popup Notification -->
   <div id="spot-prompt" class="glass-panel"></div>
+  <div id="job-hud" class="glass-panel"></div>
   <div id="location-popup" class="glass-panel">
     <p>📍 DISCOVERED LANDMARK</p>
     <h3 id="popup-title">Conolly's Plot</h3>
@@ -216,6 +224,46 @@
     </form>
   </div>
 
+  <!-- Shop counter (economy.js) -->
+  <div class="modal-overlay" id="shop-modal">
+    <div class="modal-box glass-panel econ-box">
+      <div class="modal-header">
+        <div><h2 id="shop-title">Shop</h2><div id="shop-sub" class="econ-sub"></div></div>
+        <button class="btn-close" id="shop-close">&times;</button>
+      </div>
+      <div id="shop-list" class="shop-list"></div>
+      <div class="shop-foot">
+        <span id="shop-cash"></span><span id="shop-total"></span>
+        <button type="button" class="btn-teleport" id="shop-pay">Pay</button>
+      </div>
+      <div id="shop-msg" class="shop-msg"></div>
+    </div>
+  </div>
+
+  <!-- Bag -->
+  <div class="modal-overlay" id="bag-modal">
+    <div class="modal-box glass-panel econ-box">
+      <div class="modal-header">
+        <div><h2>🎒 Your bag</h2><div id="bag-cash" class="econ-sub"></div></div>
+        <button class="btn-close" id="bag-close">&times;</button>
+      </div>
+      <div id="bag-list" class="shop-list"></div>
+      <div id="bag-msg" class="shop-msg"></div>
+    </div>
+  </div>
+
+  <!-- Jobs board -->
+  <div class="modal-overlay" id="jobs-modal">
+    <div class="modal-box glass-panel econ-box">
+      <div class="modal-header">
+        <div><h2>💼 Jobs board</h2><div id="jobs-cash" class="econ-sub"></div></div>
+        <button class="btn-close" id="jobs-close">&times;</button>
+      </div>
+      <p class="econ-sub">Everything in Nilambur is paid for in cash. Take a job, follow the yellow beam, and get paid when it's done.</p>
+      <div id="jobs-list" class="jobs-list"></div>
+    </div>
+  </div>
+
   <!-- Modal: Godot Script & Scene Inspector -->
   <div class="modal-overlay" id="godot-modal">
     <div class="modal-box glass-panel">
@@ -265,6 +313,7 @@
   <script src="world.js"></script>
   <script src="town.js"></script>
   <script src="interiors.js"></script>
+  <script src="economy.js"></script>
   <script src="main.js"></script>
   <script src="multiplayer.js"></script>
 </body>

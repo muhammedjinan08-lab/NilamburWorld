@@ -1265,6 +1265,7 @@ function buildAdyanparaWaterfall() {
     const spring = mk(new THREE.CircleGeometry(3.2, 24), springMat, 0, H - 3.35, 5.5, false, true);
     spring.rotation.x = -Math.PI / 2;
     g.add(spring);
+    window.SPRING_MESH = spring;   // economy.js: the spring-water job
     const sr = makeRng(41);
     for (let i = 0; i < 6; i++) {
       const a = i / 6 * Math.PI * 2, rr = 2.7 + sr() * 0.8;

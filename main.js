@@ -1102,6 +1102,7 @@ function animate() {
 
   updatePlayerMovement(dt);
   if (typeof updateSpotPrompt === 'function') updateSpotPrompt();
+  if (typeof econTick === 'function') econTick(dt);
   updateEngineAudio();
   updateCamera(dt);
   updateEnvironment(dt, false);
@@ -1342,6 +1343,8 @@ function completeQuest(questId) {
     q.done = true;
     state.score += q.score;
     renderQuestsUI();
+    // Exploration bounty, paid in cash (the only other way to earn is the Jobs board)
+    if (typeof earnCash === 'function') earnCash(q.score);
   }
 }
 
@@ -1475,6 +1478,7 @@ function drawMapContent(ctx, w, h, mapX, mapZ, sc, labels) {
   }
 
   if (window.NW && NW.drawMinimap) NW.drawMinimap(ctx, mapX, mapZ, { w, h, tag });
+  if (typeof drawJobOnMap === 'function') drawJobOnMap(ctx, mapX, mapZ);
 
   // Draw Player Position Dot
   const px = mapX(state.playerPos.x);
@@ -1743,6 +1747,7 @@ function setupEventListeners() {
   window.addEventListener('keydown', (e) => {
     if (typing(e)) return;
     if (mapModalOpen) { if (e.code === 'Escape') closeFullMap(); return; }
+    if (typeof econModalOpen === 'function' && econModalOpen()) { if (e.code === 'Escape' || e.code === 'KeyE') closeEconModals(); return; }
     keyState[e.code] = true;
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     if (e.code === 'KeyE' && !e.repeat) interactNearest();

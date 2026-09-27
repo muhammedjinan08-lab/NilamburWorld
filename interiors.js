@@ -377,15 +377,14 @@ SHOP_FIT.fruit = function (c) {
   const S = cashCounter(R, 1.2, hd - 2.3, Math.PI, 1.6, { mundu: true, shirt: 0xe8e0c0 });
   weighingScale(S, -0.3, 0.92, 0);
   npc(R, 2.2, 0, hd - 1.7, Math.PI + 0.6, { hold: HOLD.paper });
-  addSpot(R, 1.2, 0, hd - 1.6, spice ? '🌶️' : '🥬', spice ? 'Buy spices' : 'Buy vegetables', () =>
-    spice ? ['Spices bought', '250 g Malabar pepper and 100 g cardamom - ' + rupees(310) + '. Fresh from the Nilambur hills.']
-          : ['Vegetables bought', 'A kilo of tomatoes, onions and a bunch of bananas - ' + rupees(145) + '. "Fresh this morning from the farm!"']);
+  shopSpot(R, 1.2, hd - 1.6, spice ? '🌶️' : '🥬', spice ? 'Buy spices' : 'Buy vegetables & fruits', spice ? 'spice' : 'veg', 1.8, c.o && c.o.name);
 };
 
 SHOP_FIT.salon = function (c) {
   const { R, o, hw, hd, ch } = c;
   const ladies = /ladies|parlour|beauty/i.test(o.name + ' ' + o.sub);
   const seatHex = ladies ? 0xb04a8a : 0x1a1a1a;
+  shopSpot(R, -c.hw + 1.2, c.hd - 1.0, '💆', 'Other services & products', 'salon', 1.2, o.name);
   // Mirror wall + counter along the right wall; hydraulic chairs facing it
   const mz0 = -hd + 0.8, mz1 = hd - 1.4, mlen = mz1 - mz0;
   const M = sub(R, hw - 0.02, (mz0 + mz1) / 2, -Math.PI / 2);
@@ -423,6 +422,8 @@ SHOP_FIT.salon = function (c) {
       for (let k = 0; k < 14; k++) C.box('cloth', 0.05 + irng() * 0.05, 0.004, 0.03, (irng() - 0.5) * 0.9, 0.004, (irng() - 0.5) * 0.9, 0x1a1410, 0, irng() * 3);   // clippings
     }
     if (i === 1) addSpot(C, 0, 0, 0.9, '💈', ladies ? 'Sit down for a hair styling' : 'Sit down for a haircut', () => {
+      const price = ladies ? 250 : 120;
+      if (!spendCash(price)) return ['Not enough cash', 'A ' + (ladies ? 'hair styling' : 'haircut') + ' is ' + rupees(price) + ' and you have ' + fmtRs(econ.cash) + '. Take a job from the 💼 Jobs board to earn some.'];
       const cur = (window.playerAppearance && window.playerAppearance.hairStyle) || 'short';
       const order = ladies ? ['bun', 'braid', 'ponytail', 'long', 'medium'] : ['short', 'medium', 'bald', 'ponytail', 'long'];
       const next = order[(order.indexOf(cur) + 1) % order.length];
@@ -431,7 +432,7 @@ SHOP_FIT.salon = function (c) {
       if (window.NW && NW.setAppearance) NW.setAppearance(partial); else applyPlayerAppearance(Object.assign({}, window.playerAppearance, partial));
       chime([880, 1320], 0.4);
       const label = (HAIR_STYLE_LIST.find(h => h[0] === next) || [next, next])[1];
-      return [ladies ? 'Styled!' : 'Fresh haircut!', 'You now have a ' + label.toLowerCase() + ' style - ' + rupees(ladies ? 250 : 120) + '. Come again next month!'];
+      return [ladies ? 'Styled!' : 'Fresh haircut!', 'You now have a ' + label.toLowerCase() + ' style - paid ' + rupees(price) + ' cash. Come again next month!'];
     }, 1.2);
     if (i === 2) npc(C, 0.35, 0, -0.7, 0.8, { pose: 'side', shirt: ladies ? 0xf0a0c8 : 0x151515, lower: 0x2a2a2a, hairStyle: ladies ? 'long' : 'short' });
   });
@@ -476,7 +477,7 @@ SHOP_FIT.textile = function (c) {
     counter(R, -1.2, hd - 2.6, 2.2, 0.8, 0.9, 0x7a5030);
     R.box('paint', 0.9, 0.005, 0.02, -1.2, 0.905, hd - 2.6, 0xe8d020);
     npc(R, -1.2, 0, hd - 3.3, 0, { pose: 'front', mundu: true, shirt: 0xf0f0e8, hold: (P, up, B) => P('paint', B(0.9, 0.005, 0.02), 0, 1.16 + up, 0.34, 0xe8d020) });
-    addSpot(R, -1.2, 0, hd - 1.8, '📏', 'Get measured for a shirt', () => ['Measurements taken', 'Chest 38, sleeve 24, length 29 - your shirt will be ready day after tomorrow. ' + rupees(450) + ' stitching charge.'], 1.6);
+    shopSpot(R, -1.2, hd - 1.8, '📏', 'Tailoring counter', 'tailor', 1.6, c.o && c.o.name);
   } else {
     // Long sales counter with an unfurled saree, staff behind it, customers seated in front
     counter(R, 0.4, -0.6, 1.0, 2 * hd - 4.2, 0.9, 0x7a5030);
@@ -488,6 +489,7 @@ SHOP_FIT.textile = function (c) {
     // Mannequins by the entrance
     [[-hw + 1.2, hd - 1.8, 0xc0392b], [hw - 1.0, hd - 1.8, 0xf3efe2]].forEach(m => npc(R, m[0], 0, m[1], 0, { skin: 0xf2e8dc, hairStyle: 'none', saree: true, shirt: m[2], lower: m[2] === 0xf3efe2 ? 0xf7f3e6 : m[2] }));
     // Trial room in the back-right corner
+    shopSpot(R, 1.3, 1.4, '👗', 'Buy clothes at the counter', 'textile', 1.6, c.o && c.o.name);
     const tx = hw - 0.8, tz = -hd + 0.9;
     R.box('wood', 0.05, 2.2, 1.6, tx - 0.8, 1.1, tz, 0xd8c8a8);
     R.box('metal', 1.6, 0.03, 0.03, tx, 2.1, tz + 0.8, 0xc0c4c8);
@@ -525,7 +527,7 @@ SHOP_FIT.gold = function (c) {
   R.box('mirror', 0.5, 0.8, 0.02, hw - 0.03, 1.6, hd - 1.8, undefined, 0, -Math.PI / 2);
   for (let i = 0; i < 6; i++) R.cyl('gold', 0.015, 0.015, 0.25 + (i % 2) * 0.1, Math.cos(i) * 0.25, ch - 0.35, -0.5 + Math.sin(i) * 0.25, undefined, 6);
   R.put('lamp', orbGeo(0.12), 0, ch - 0.55, -0.5);
-  addSpot(back, 0, 0, 1.3, '💍', 'Try on jewellery', () => ['Swarna collection', 'You tried on a 22-carat temple necklace - 32 grams, ' + rupees(215000) + '. "A perfect fit for the wedding season!"'], 1.8);
+  shopSpot(back, 0, 1.3, '💍', 'Buy jewellery', 'gold', 1.8, c.o && c.o.name);
 };
 
 SHOP_FIT.bakery = function (c) {
@@ -564,7 +566,7 @@ SHOP_FIT.bakery = function (c) {
   cashCounter(R, hw - 1.3, 0.8, -Math.PI / 2, 1.4, { shirt: 0xb5541c });
   npc(R, 0.3, 0, -0.5, -2.6, { hold: HOLD.paper });
   table(R, 1.6, hd - 2.3, 0.6, 0.6, 1.05);
-  addSpot(R, -hw + 1.8, 0, -0.4, '🥐', 'Buy something from the bakery', () => [pick(['Chicken puff', 'Plum cake', 'Unniyappam', 'Kerala halwa']), 'Warm from the oven - ' + rupees(pick([25, 40, 60, 120])) + '. Goes perfectly with a chaya.'], 1.8);
+  shopSpot(R, -hw + 1.8, -0.4, '🥐', 'Buy from the bakery', 'bakery', 1.8, c.o && c.o.name);
 };
 
 SHOP_FIT.tea = function (c) {
@@ -575,7 +577,7 @@ SHOP_FIT.tea = function (c) {
       shelving(sub(R, x, z, yw), 0, 0, len, 2.2, 0.35, 5, 0x6a4a2a, (U, y, i, w) => i % 2 ? tins(U, y, w, [0x1f5a3a, 0xc0392b, 0xd4a017, 0x2a2a2a], 0.07, 0.2) : packets(U, y, w, 0.3, [0x2e7d4f, 0xe8a020, 0x7a1f1f, 0xf0e6c0], 0.14, 0.22, 0.08, 0.04)));
     const S = cashCounter(R, 0, 0.3, 0, 2.2, { mundu: true, shirt: 0x2e7d4f });
     for (let i = 0; i < 4; i++) S.cyl('paint', 0.05, 0.04, 0.06, -0.8 + i * 0.25, 0.94, 0.15, 0xffffff, 10);
-    addSpot(R, 0, 0, 1.4, '🍵', 'Taste the new tea blend', () => ['Kanan Devan blend', 'Strong Munnar dust tea with a hint of cardamom. 500 g for ' + rupees(260) + '.'], 1.6);
+    shopSpot(R, 0, 1.4, '🍵', 'Buy tea & coffee', 'teadepot', 1.6, c.o && c.o.name);
   } else {
     // Chayakkada: tea counter by the entrance with the boiler, glasses and a snack cabinet
     const S = sub(R, -hw + 1.0, hd - 1.9, Math.PI / 2);
@@ -600,7 +602,7 @@ SHOP_FIT.tea = function (c) {
     }
     wallFrame(sub(R, hw - 0.02, -1, -Math.PI / 2), 0, 1.8, 0, 0.5, 0.7, 0xf4e8c8);   // calendar
     R.box('paint', 0.3, 0.18, 0.12, hw - 0.12, 1.9, 1.2, 0x5a3a20);                   // radio on a bracket
-    addSpot(S, -0.2, 0, 1.2, '☕', 'Order a chaya', () => ['Chaya & parippuvada', 'A hot "meter chaya", pulled high for the froth, with a crispy parippuvada - ' + rupees(30) + '. The morning newspaper is on the bench.'], 1.8);
+    shopSpot(S, -0.2, 1.2, '☕', 'Order chaya & snacks', 'chaya', 1.8, c.o && c.o.name);
   }
   ceilingFan(R, 0.5, ch, -0.5);
 };
@@ -620,7 +622,7 @@ SHOP_FIT.grocery = function (c) {
     for (let i = 0; i < 4; i++) R.cyl('cloth', 0.28, 0.32, 0.65, hw - 0.5, 0.33, 0.6 + i * 0.7, 0xd8c098, 8);
     const S = cashCounter(R, -1.6, 1.2, Math.PI, 2.0, { mundu: true, shirt: 0xe8e0c0 });
     weighingScale(S, 0.4, 0.92, 0);
-    addSpot(R, -1.6, 0, 2.2, '🌾', 'Buy provisions', () => ['Provisions packed', '5 kg Matta rice, 1 litre coconut oil and a packet of rava - ' + rupees(540) + '. Tied up in a paper bag with jute string.'], 1.8);
+    shopSpot(R, -1.6, 2.2, '🌾', 'Buy provisions', 'provisions', 1.8, c.o && c.o.name);
   } else {
     // Supermarket: gondola aisles, wall shelving, freezer, billing counter with a scanner
     const aisleLen = 2 * hd - 4.2;
@@ -638,7 +640,7 @@ SHOP_FIT.grocery = function (c) {
     S.box('paint', 0.12, 0.14, 0.08, 0.3, 0.97, 0.1, 0x151515);
     for (let i = 0; i < 4; i++) R.box('paint', 0.42, 0.22, 0.3, -hw + 1.6, 0.11 + i * 0.09, hd - 1.2, 0xd33a3a);
     npc(R, 0.5, 0, 1.2, 0.4, { pose: 'front', hold: (P, up, B) => P('paint', B(0.4, 0.22, 0.28), 0, 0.95 + up, 0.3, 0xd33a3a) });
-    addSpot(R, -1.6, 0, hd - 1.3, '🛒', 'Check out at the billing counter', () => ['Billed', 'Rice, sugar, a packet of banana chips and dosa batter - ' + rupees(682) + '. "Do you have our loyalty card?"'], 1.8);
+    shopSpot(R, -1.6, hd - 1.3, '🛒', 'Shop at the billing counter', 'supermarket', 1.8, c.o && c.o.name);
   }
   tubeLight(R, 0, ch - 0.06, 0, Math.PI / 2);
 };
@@ -662,9 +664,7 @@ SHOP_FIT.pharmacy = function (c) {
   R.box('paint', 0.6, 1.7, 0.55, hw - 0.4, 0.85, hd - 2.2, 0xe8ecef);                  // medicine fridge
   R.box('cglass', 0.52, 1.3, 0.02, hw - 0.4 - 0.29, 1.0, hd - 2.2, undefined, 0, Math.PI / 2);
   R.col(hw - 0.4, hd - 2.2, 0.3, 0.28);
-  addSpot(S, 0, 0, 0.9, '💊', 'Hand over your prescription', () => ['Pharmacist', generic
-    ? 'Generic paracetamol and a vitamin strip - just ' + rupees(28) + '. Same medicine, fraction of the price.'
-    : 'Paracetamol 650, one tablet after food, three times a day. And drink plenty of water - ' + rupees(64) + '.'], 1.8);
+  shopSpot(S, 0, 0.9, '💊', 'Buy medicines', 'pharmacy', 1.8, c.o && c.o.name);
   tubeLight(R, 0, ch - 0.06, -1.5, 0);
 };
 
@@ -691,7 +691,7 @@ SHOP_FIT.hardware = function (c) {
   torus(R, 'rubber', 0.3, 0.025, hw - 0.6, 0.06, hd - 3.2, 0x2ea043, Math.PI / 2);
   const S = cashCounter(R, 0.8, 1.0, Math.PI, 1.8, { shirt: 0x204a8a, lower: 0x3a3a3a });
   S.box('metal', 0.4, 0.05, 0.1, -0.4, 0.93, 0.1, 0x9aa0a6);
-  addSpot(R, 0.8, 0, 2.0, '🔨', 'Ask for tools', () => ['Hardware bought', 'A claw hammer, 2 kg of nails and a litre of teak wood polish - ' + rupees(890) + '. "Need the pipes delivered?"'], 1.8);
+  shopSpot(R, 0.8, 2.0, '🔨', 'Buy hardware', 'hardware', 1.8, c.o && c.o.name);
 };
 
 SHOP_FIT.mobile = function (c) {
@@ -720,9 +720,7 @@ SHOP_FIT.mobile = function (c) {
   npc(T, 0, 0, -0.55, 0, { sit: true, pose: 'front', shirt: 0x2a2f45 });
   R.box('paint', 0.04, 0.6, 1.0, -hw + 0.03, 2.1, 1.4, 0x101010);
   R.box('screen', 0.02, 0.52, 0.9, -hw + 0.06, 2.1, 1.4, 0x3ee0ff);
-  addSpot(B, 0.4, 0, 1.4, '📱', tech ? 'Look at laptops' : 'Check out phones', () => tech
-    ? ['Digital Point', 'A 15-inch laptop with 16 GB RAM - ' + rupees(58990) + ', with a free bag and mouse. "EMI available!"']
-    : ['Mobile World', 'The new 5G phone with a 50 MP camera - ' + rupees(17999) + '. Screen guard and back cover free. Recharge while you wait?'], 1.8);
+  shopSpot(B, 0.4, 1.4, tech ? '💻' : '📱', tech ? 'Buy laptops & accessories' : 'Buy phones, accessories & recharge', tech ? 'laptops' : 'mobile', 1.8, c.o && c.o.name);
 };
 
 SHOP_FIT.electronics = function (c) {
@@ -745,7 +743,7 @@ SHOP_FIT.electronics = function (c) {
     npc(R, hw - 1.7, 0, -0.3, Math.PI / 2, { pose: 'front', shirt: 0x0f3d6e });
     plasticChair(R, -hw + 1.1, -hd + 1.95, Math.PI, 0x151515);
     npc(R, -hw + 1.1, 0, -hd + 1.95, Math.PI, { sit: true, seat: 0.46, pose: 'front' });
-    addSpot(R, hw - 1.9, 0, 0.8, '📷', 'Browse cameras & computers', () => ['Tech Bazaar', 'A mirrorless camera kit with an 18-55 mm lens - ' + rupees(64500) + '. "We also build custom gaming PCs!"'], 1.8);
+    shopSpot(R, hw - 1.9, 0.8, '📷', 'Buy cameras & computers', 'laptops', 1.8, c.o && c.o.name);
   } else {
     // Appliances: TVs on the back wall, fridges on the left, washing machines on the right, split ACs
     const B = sub(R, 0, -hd + 0.05, 0);
@@ -767,7 +765,7 @@ SHOP_FIT.electronics = function (c) {
     for (let i = 0; i < 2; i++) R.box('paint', 0.9, 0.3, 0.22, -1 + i * 2, ch - 0.35, -hd + 0.15, 0xf8f8f8);
     npc(R, 0.5, 0, 0.2, Math.PI, { pose: 'front', shirt: 0x0f3d6e, hold: HOLD.paper });
     npc(R, 0.4, 0, 1.2, 0.2, {});
-    addSpot(R, 0.5, 0, 1.0, '📺', 'Ask about a new TV', () => ['Sree Electronics', 'A 43-inch 4K smart TV - ' + rupees(28990) + ' with free installation. "Exchange your old TV for ' + rupees(2000) + ' off!"'], 1.8);
+    shopSpot(R, 0.5, 1.0, '📺', 'Buy electronics & appliances', 'electronics', 1.8, c.o && c.o.name);
   }
   ceilingFan(R, 0, ch, 0);
 };
@@ -794,7 +792,7 @@ SHOP_FIT.stationery = function (c) {
     npc(T, 0, 0, 0.6, Math.PI, { sit: true, seat: 0.46, pose: 'front' });
     for (let i = 0; i < 6; i++) R.box('cloth', 0.3, 0.06, 0.21, -1 + (i % 3) * 0.32, 0.03 + Math.floor(i / 3) * 0.06, -0.6, 0xffffff);
     cashCounter(R, -0.8, 1.2, Math.PI, 1.8, { shirt: 0x8a2a2a });
-    addSpot(R, -0.8, 0, 2.2, '🖨️', 'Get a photocopy', () => ['Xerox done', '20 copies of your ID and a spiral-bound project report - ' + rupees(95) + '.'], 1.8);
+    shopSpot(R, -0.8, 2.2, '🖨️', 'Photocopy, print & bind', 'xerox', 1.8, c.o && c.o.name);
   } else if (/uniform|student/i.test(txt)) {
     for (const sd of [-1, 1]) {
       R.box('metal', 0.03, 0.03, 2 * hd - 3, sd * (hw - 0.4), 1.9, -0.8, 0xc0c4c8);
@@ -803,7 +801,7 @@ SHOP_FIT.stationery = function (c) {
     shelving(sub(R, 0, -hd + 0.2, 0), 0, 0, 2 * hw - 2, 2.2, 0.4, 4, 0x6a4a2a, (U, y, i, w) => packets(U, y, w, 0.35, [0xd33a3a, 0x2a58d8, 0x2ea043, 0xe07a1a], 0.3, 0.36, 0.2, 0.06));
     cashCounter(R, 0, 0.6, Math.PI, 2.0, { shirt: 0xf0f0e8 });
     npc(R, 1.2, 0, 1.8, 0.4, { k: 0.8, shirt: 0xf4f4f0, lower: 0x22304a });
-    addSpot(R, 0, 0, 1.6, '🎒', 'Buy a school bag', () => ["Student's Corner", 'A waterproof school bag and two uniform sets - ' + rupees(1350) + '. New academic year stock!'], 1.8);
+    shopSpot(R, 0, 1.6, '🎒', 'Buy school supplies', 'uniform', 1.8, c.o && c.o.name);
   } else {
     // Bookshop: bookshelves around the walls, a table of notebooks, a globe
     [[0, -hd + 0.2, 0, 2 * hw - 0.4], [-hw + 0.2, -0.4, Math.PI / 2, 2 * hd - 3.4], [hw - 0.2, -0.4, -Math.PI / 2, 2 * hd - 3.4]].forEach(([x, z, yw, len]) =>
@@ -813,7 +811,7 @@ SHOP_FIT.stationery = function (c) {
     R.cyl('wood', 0.02, 0.06, 0.2, 0.7, 0.92, -0.6, 0x5a3a20, 6); orb(R, 'paint', 0.14, 0.7, 1.15, -0.6, 0x2a78c8);
     cashCounter(R, 1.2, 1.4, Math.PI, 1.6, { shirt: 0x8a2a2a });
     npc(R, -0.8, 0, 0.4, Math.PI, { hold: HOLD.book });
-    addSpot(R, 0, 0, 0.4, '📚', 'Browse books', () => ['Book Point', pick(['"Randamoozham" by M.T. Vasudevan Nair', '"Aadujeevitham" by Benyamin', '"Khasakkinte Ithihasam" by O.V. Vijayan', 'A 200-page long notebook, pack of 6']) + ' - ' + rupees(pick([60, 250, 399, 450])) + '.'], 1.8);
+    shopSpot(R, 0, 0.4, '📚', 'Buy books & stationery', 'books', 1.8, c.o && c.o.name);
   }
   tubeLight(R, 0, ch - 0.06, 0, 0);
 };
@@ -835,7 +833,7 @@ SHOP_FIT.hotel = function (c) {
     npc(R, -hw + 0.6, 0, 0.1, Math.PI / 2, { sit: true, seat: 0.42, hold: HOLD.paper });
     R.cyl('paint', 0.22, 0.18, 0.4, hw - 0.5, 0.2, hd - 1.8, 0x7a4a24, 10); heap(R, hw - 0.5, 0.4, hd - 1.8, 0.35, 0.7, 0.35, 0x2e7d4f);
     R.box('paint', 0.5, 0.65, 0.3, 1.0, 0.33, 1.4, 0x1c3a6a); R.col(1.0, 1.4, 0.25, 0.15);   // suitcase
-    addSpot(R, 0, 0, -hd + 2.4, '🛎️', 'Ask for a room', () => ['Room available', 'A/C double room, ' + rupees(1400) + ' per night including breakfast. "Room 204, second floor - here is your key."'], 1.8);
+    shopSpot(R, 0, -hd + 2.4, '🛎️', 'Reception - book a room', 'lodge', 1.8, c.o && c.o.name);
   } else {
     // Restaurant: tables of diners on banana leaves, waiter, cash counter, wash basin, kitchen hatch
     const tables = [];
@@ -862,7 +860,7 @@ SHOP_FIT.hotel = function (c) {
     S.cyl('cglass', 0.07, 0.07, 0.14, -0.4, 0.99, 0.1); S.cyl('cloth', 0.06, 0.06, 0.08, -0.4, 0.96, 0.1, 0x6aa84a, 8);   // fennel jar
     R.box('paint', 0.55, 0.2, 0.4, -hw + 0.25, 0.85, hd - 2.2, 0xf4f4f4); R.box('mirror', 0.02, 0.6, 0.5, -hw + 0.03, 1.5, hd - 2.2);
     wallFrame(sub(R, -hw + 0.02, 0, Math.PI / 2), 0, 2.1, 0, 1.0, 0.7, 0xf4e8c8);   // menu
-    addSpot(R, 0, 0, 0.9, '🍛', 'Order food', () => [pick(['Malabar chicken biriyani', 'Kerala sadya on a banana leaf', 'Porotta & beef fry', 'Fish curry meals']), 'Served steaming hot - ' + rupees(pick([90, 140, 160, 180])) + '. "Some more curry? It\'s free!"'], 1.8);
+    shopSpot(R, 0, 0.9, '🍛', 'Order food (or get your fish cooked)', 'restaurant', 1.8, c.o && c.o.name);
     for (const z of [-1.8, 1.0]) ceilingFan(R, 0, ch, z);
   }
 };
@@ -893,7 +891,7 @@ SHOP_FIT.furniture = function (c) {
   R.box('wood', 1.8, 0.08, 0.6, -1.0, 0.6, hd - 2.6, teak);
   for (const sx of [-1, 1]) R.cyl('metal', 0.008, 0.008, ch - 0.65, -1.0 + sx * 0.8, 0.65 + (ch - 0.65) / 2, hd - 2.6, 0x8a8e92, 4);
   npc(R, 0.2, 0, 0.2, Math.PI * 0.8, { mundu: true, shirt: 0xe8dcc0 });
-  addSpot(R, -1.0, 0, hd - 1.6, '🪑', 'Try the teak swing (oonjal)', () => ['Nilambur Teak Furniture', 'A hand-carved Nilambur teak oonjal, seasoned 3 years - ' + rupees(48000) + '. "Teak from our own forest - it will last a hundred years."'], 1.8);
+  shopSpot(R, -1.0, hd - 1.6, '🪑', 'Buy teak furniture', 'furniture', 1.8, c.o && c.o.name);
 };
 
 SHOP_FIT.optical = function (c) {
@@ -916,13 +914,14 @@ SHOP_FIT.optical = function (c) {
   const chartS = sub(R, -hw + 0.03, hd - 2.8, Math.PI / 2);
   chartS.box('paint', 0.8, 1.1, 0.02, 0, 1.6, 0, 0xffffff);
   for (let r = 0; r < 7; r++) chartS.box('paint', 0.5 - r * 0.06, 0.08 - r * 0.008, 0.005, 0, 2.0 - r * 0.13, 0.012, 0x101010);
-  addSpot(T, 0, 0, 0.9, '👓', 'Get an eye test', () => ['Eye test', 'Read the chart... "E, F P, T O Z" - perfect 6/6 vision! No glasses needed, but anti-glare sunglasses are ' + rupees(799) + '.'], 1.4);
+  shopSpot(T, 0, 0.9, '👓', 'Eye test & glasses', 'optical', 1.4, c.o && c.o.name);
 };
 
 SHOP_FIT.generic = function (c) {
   const { R, hw, hd } = c;
   shelving(sub(R, 0, -hd + 0.2, 0), 0, 0, 2 * hw - 0.4, 2.2, 0.35, 5, 0x6a4a2a, (U, y, i, w) => packets(U, y, w, 0.3, NPC_SHIRTS, 0.16, 0.22, 0.1, 0.04));
   cashCounter(R, 0, 0, 0, 2.0, {});
+  shopSpot(R, 0, 0.9, '🛍️', 'Buy at the counter', 'general', 1.8, c.o && c.o.name);
 };
 
 function furnishShop(F, o, w, d, h1) {
@@ -1044,7 +1043,7 @@ CIVIC.hospital = function (c) {
   const W = sub(R, 3.2, hd - 2.0, -0.5);
   torus(W, 'rubber', 0.3, 0.02, -0.3, 0.3, 0, 0x2a2a2a, 0, Math.PI / 2); torus(W, 'rubber', 0.3, 0.02, 0.3, 0.3, 0, 0x2a2a2a, 0, Math.PI / 2);
   W.box('cloth', 0.5, 0.04, 0.45, 0, 0.5, 0, 0x1a3a6a); W.box('cloth', 0.5, 0.45, 0.04, 0, 0.75, -0.22, 0x1a3a6a);
-  addSpot(S, 0, 0, 1.2, '🏥', 'Get an OP ticket', () => ['OP ticket issued', 'Token no. ' + (20 + ((irng() * 60) | 0)) + ' - General Medicine, Dr. Nair, room 2. OP ticket fee ' + rupees(10) + '. "Please wait on the bench."'], 1.8);
+  shopSpot(S, 0, 1.2, '🏥', 'OP ticket counter', 'hospital', 1.8, c.o && c.o.name);
   for (const x of [-3, 3]) ceilingFan(R, x, ch, 0);
 };
 CIVIC.school = function (c) {
@@ -1085,7 +1084,7 @@ CIVIC.post = function (c) {
   R.box('paint', 0.3, 0.04, 0.02, hw - 0.6, 1.0, hd - 1.2 + 0.25, 0x151515);
   R.col(hw - 0.6, hd - 1.2, 0.3, 0.3);
   for (let i = 0; i < 3; i++) npc(R, -1.2 + i * 0.1, 0, 0.3 + i * 0.7, Math.PI, { hold: i === 0 ? HOLD.paper : undefined, mundu: i === 1 });
-  addSpot(R, 0.8, 0, 0.3, '✉️', 'Post a letter', () => ['Letter posted', 'Speed Post to Kozhikode, 20 g - ' + rupees(41) + '. "It will reach tomorrow. Here is your tracking number."'], 1.8);
+  shopSpot(R, 0.8, 0.3, '✉️', 'Post office counter', 'post', 1.8, c.o && c.o.name);
   ceilingFan(R, 0, ch, 1.5);
 };
 CIVIC.kseb = function (c) {
@@ -1098,7 +1097,7 @@ CIVIC.kseb = function (c) {
   M.box('paint', 2.0, 1.2, 0.03, 0, 1.6, 0, 0x3a4a5a);
   for (let i = 0; i < 6; i++) { M.box('paint', 0.22, 0.3, 0.06, -0.75 + i * 0.3, 1.7, 0.03, 0xe8e8e8); M.box('screen', 0.14, 0.05, 0.01, -0.75 + i * 0.3, 1.74, 0.065, 0xff6040); }
   for (let i = 0; i < 3; i++) npc(R, -1.6 + i * 0.05, 0, 1.6 + i * 0.7, Math.PI, { mundu: i !== 1, hold: i === 0 ? HOLD.paper : undefined });
-  addSpot(R, -1.6, 0, 1.6, '💡', 'Pay the electricity bill', () => ['Bill paid', 'Consumer no. 1145' + (100 + ((irng() * 800) | 0)) + ', 212 units this month - ' + rupees(1186) + '. "Pay online next time on the KSEB app!"'], 1.8);
+  shopSpot(R, -1.6, 1.6, '💡', 'Pay the electricity bill', 'kseb', 1.8, c.o && c.o.name);
   ceilingFan(R, 0, ch, 0);
 };
 CIVIC.bank = function (c) {
@@ -1114,7 +1113,7 @@ CIVIC.bank = function (c) {
   A.col(0, 0, 0.35, 0.3);
   const V = sub(R, 0, -hd + 0.05, 0);
   V.box('metal', 2.0, 2.2, 0.1, 0, 1.1, 0, 0x6a7278); V.cyl('metal', 0.7, 0.7, 0.12, 0, 1.2, 0.06, 0x9aa0a6, 20, Math.PI / 2); V.cyl('metal', 0.12, 0.12, 0.18, 0, 1.2, 0.12, 0xc0c4c8, 10, Math.PI / 2);
-  addSpot(A, 0, 0, 0.9, '🏧', 'Use the ATM', () => ['ATM', 'Available balance: ' + rupees(state.score * 10 + 2500) + ' (earned by exploring Nilambur). "Please take your card."'], 1.4);
+  addSpot(A, 0, 0, 0.9, '🏧', 'Use the ATM', () => ['ATM', 'Your account balance is ' + rupees(0) + '. Nilambur runs on cash - you have ' + fmtRs(econ.cash) + ' in your pocket. Earn more from the 💼 Jobs board.'], 1.4);
   addSpot(R, -1.0, 0, 0.4, '🏦', 'Talk to the cashier', () => ['Nilambur Co-op Bank', 'Fixed deposit rate 7.5% for one year. "Locker available on the first floor - bring two photos and your Aadhaar."'], 1.6);
   ceilingFan(R, 0, ch, 1.5);
 };
@@ -1139,7 +1138,7 @@ CIVIC.theatre = function (c) {
   T.box('wood', 1.4, 1.1, 0.6, 0, 0.55, 0, 0x7a1f1f); T.box('cglass', 1.4, 0.8, 0.03, 0, 1.5, 0.3);
   npc(T, 0, 0, -0.6, 0, { sit: true, seat: 0.5, pose: 'front' });
   T.col(0, 0, 0.7, 0.3);
-  addSpot(R, 0, 0, hd - 2.0, '🎬', 'Watch the film', () => ['Now showing', pick(['"Manjummel Boys" - 2:40 pm show. Balcony ' + rupees(150) + ', first class ' + rupees(110) + '.', '"Aavesham" - 6:30 pm show, housefull! Next show 9:30 pm.', '"Premam" re-release - matinee ' + rupees(100) + '. Interval samosas are the best in town.'])], 2.0);
+  shopSpot(R, 0, hd - 2.0, '🎬', 'Buy a film ticket & snacks', 'theatre', 1.8, c.o && c.o.name);
 };
 CIVIC.depot = function (c) {
   const { R, hw, hd, ch } = c;
@@ -1156,7 +1155,7 @@ CIVIC.depot = function (c) {
     R.box('paint', 0.5, 0.35, 0.25, 0.8 + r * 2.6, 0.18, 0.4 + r * 1.6, 0x5a2a12);
   }
   npc(R, -2.0, 0, 1.2, 0.5, { shirt: KHAKI, lower: KHAKI, hold: (P, up, B) => P('paint', B(0.14, 0.2, 0.06), 0.2, 1.05 + up, 0.3, 0x2a2a2a) });   // conductor with ticket machine
-  addSpot(S, 0, 0, 1.2, '🚌', 'Bus enquiry & reservation', () => ['KSRTC Nilambur', pick(['Kozhikode fast passenger - every 30 min, ' + rupees(92) + '.', 'Ooty via Nadukani ghat - 7:15 am, 1:30 pm, ' + rupees(145) + '.', 'Manjeri ordinary - every 10 minutes, ' + rupees(28) + '.'])], 1.8);
+  shopSpot(S, 0, 1.2, '🚌', 'Bus tickets & reservation', 'busdepot', 1.8, c.o && c.o.name);
   for (const x of [-5, 0, 5]) ceilingFan(R, x, ch, 0);
 };
 CIVIC.office = function (c) {
@@ -1287,12 +1286,14 @@ function furnishMarket(F) {
     R.col(x, z, 1.5, 0.65);
     const woman = (i + r) % 3 === 0;
     npc(R, x, 0, z - 1.0, 0, { pose: 'front', mundu: !woman, saree: woman, hairStyle: woman ? 'long' : 'short', shirt: fish ? 0x3a6a8a : pick(NPC_SHIRTS) });
-    if (!fish) weighingScale(R, x + 1.0, 1.15, z - 0.2);
-    else { R.box('wood', 0.5, 0.05, 0.35, x - 0.9, 1.17, z - 0.2, 0x8a5a2a); R.box('metal', 0.03, 0.02, 0.25, x - 0.9, 1.2, z - 0.2, 0xc8ccd0); }
+    // The stall top (cloth) is at 0.96 in this raised frame; fish stalls get real fish on ice instead (below)
+    if (!fish) weighingScale(R, x + 1.0, 0.96, z - 0.2);
     if ((i + r) % 2 === 0) npc(R, x + 0.6, 0, z + 1.1, Math.PI + 0.3, { hold: HOLD.paper, saree: i % 2 === 1, hairStyle: i % 2 ? 'long' : 'short' });
   }
-  addSpot(R, 6.5, 0, 4.2, '🐟', 'Buy fresh fish', () => ['Fish stall', pick(['A kilo of fresh mathi (sardines) - ' + rupees(180) + ', cleaned for free.', 'Karimeen (pearl spot) - ' + rupees(550) + ' a kilo. "Caught in the backwaters this morning!"', 'Ayala (mackerel) - ' + rupees(260) + ' a kilo.'])], 2.2);
-  addSpot(R, -6.5, 0, -1.7, '🥬', 'Buy vegetables at the market', () => ['Vegetable stall', 'Drumsticks, yam and a big bunch of curry leaves - ' + rupees(95) + '. Market prices are cheaper than the shops!'], 2.2);
+  const fishShop = shopSpot(R, 6.5, 4.2, '🐟', 'Buy fresh fish', 'fish', 2.2, 'Nilambur Market - fish stall');
+  buildFishStalls(R, [{ x: 4.5, z: 3.0 }, { x: 9, z: 3.0 }], 0.96, fishShop);
+  shopSpot(R, -6.5, -1.7, '🥬', 'Buy vegetables at the market', 'veg', 2.2, 'Nilambur Market - vegetable stall');
+  { const a = R.w(6.5, 4.2), b = R.w(-6.5, -1.7); FISH_STALL.pos = { x: a[0], z: a[1] }; FISH_STALL.veg = { x: b[0], z: b[1] }; }   // job pickups
   registerRoom(F, 0, 0, 11.8, 7.8, 0.25, 4.6, 'Nilambur Market', 'market');
 }
 function furnishUmbrellaStall(U) {
@@ -1313,7 +1314,7 @@ function buildFuelOffice(O) {
   shelving(sub(R, 1.8, -2.1, 0), 0, 0, 1.6, 1.8, 0.35, 4, 0x8a8e92, (U, y, i, w) => tins(U, y, w, [0xc8201e, 0xe8b820, 0x2a58d8, 0x151515], 0.07, 0.22));
   tubeLight(R, 0, 2.95, 0, 0);
   registerRoom(O, 0, 0, 2.8, 2.3, 0.15, 3.1, 'Fuel Station Office', 'fuel', { floorHW: 3, floorHD: 2.5 });
-  addSpot(R, -1.0, 0, 0.5, '⛽', 'Pay for fuel', () => ['Fuel Station', 'Petrol ' + rupees('104.7') + '/L, diesel ' + rupees('93.4') + '/L. Free air and a clean restroom at the back. "Card or UPI?"'], 1.8);
+  shopSpot(R, -1.0, 0.5, '⛽', 'Pay for fuel', 'fuel', 1.8, 'Fuel Station');
 }
 function buildTeaKiosk(Fk) {
   // Open-fronted bus-stand tea stall: back and side walls, a serving counter, the tea master inside
@@ -1328,7 +1329,8 @@ function buildTeaKiosk(Fk) {
   I.box('cglass', 0.7, 0.4, 0.4, 1.2, 1.25, 1.3);
   for (let i = 0; i < 4; i++) orb(I, 'cloth', 0.05, 1.0 + (i % 2) * 0.2, 1.12, 1.25 + Math.floor(i / 2) * 0.12, 0xd08a3a, 0.5);
   npc(I, -0.3, 0, 0.4, 0, { pose: 'up', mundu: true, shirt: 0xf0f0e8, hold: HOLD.glass });
-  addSpot(I, 0, 0, 2.3, '☕', 'Tea at the bus stand', () => ['Bus stand tea stall', 'Sugar-less black tea and a pazhampori (banana fritter) while you wait for the bus - ' + rupees(22) + '.'], 1.8);
+  shopSpot(I, 0, 2.3, '☕', 'Tea at the bus stand', 'chaya', 1.8, 'Bus Stand Tea Stall');
+  { const k = I.w(0, 2.3); KIOSK.pos = { x: k[0], z: k[1] }; }
 }
 function busStandPassengers(Fp) {
   const I = frame(Fp.bx, Fp.by, Fp.bz, Fp.ry, Fp.sc, 'int');
@@ -1390,7 +1392,7 @@ function furnishMuseum(p, y0, hw, hd, floorY, ceilY) {
   ];
   let fi = 0;
   addSpot(R, 0, 0, -1.0, '🏛️', 'Read the exhibit panels', () => { const f = facts[fi++ % facts.length]; return [f[0], f[1]]; }, 3.0);
-  addSpot(T, 0, 0, 0.9, '🎟️', 'Buy a museum ticket', () => ['Nilambur Teak Museum', 'Entry ' + rupees(50) + ' (children ' + rupees(20) + '). Open 10 am - 5 pm, closed on Mondays. The butterfly garden is behind the museum.'], 1.6);
+  shopSpot(T, 0, 0.9, '🎟️', 'Museum ticket counter', 'museum', 1.8, 'Nilambur Teak Museum');
 }
 function furnishPalace(p, y0, hw, hd, floorY, ceilY) {
   const I = frameAt(p.x, y0, p.z, 0, 1, 'int-palace');
@@ -1450,5 +1452,5 @@ function furnishStation(bx, by, bz, hw, hd, floorY, ceilY) {
   for (let i = 0; i < 6; i++) { B.box('paint', 1.6, 0.06, 0.005, -0.7, 2.4 - i * 0.17, 0.02, 0xffffff); B.box('screen', 0.6, 0.06, 0.005, 1.1, 2.4 - i * 0.17, 0.02, 0xffd060); }
   R.cyl('paint', 0.3, 0.3, 0.06, 3.5, 3.1, -hd + 0.06, 0xf4f4f0, 16, Math.PI / 2);
   for (const x of [-4, 3]) ceilingFan(R, x, ceilY - floorY, 0);
-  addSpot(R, -hw + 4.8, 0, hd - 1.0, '🎟️', 'Buy a train ticket', () => ['Nilambur Road booking office', pick(['Nilambur Road - Shoranur Junction, second class ordinary: ' + rupees(25) + '. Passenger at 10:10 am from platform 1.', 'Rajya Rani Express to Thiruvananthapuram - 8:50 pm. Sleeper ' + rupees(305) + '.', 'Season ticket to Angadippuram: ' + rupees(185) + ' a month.'])], 1.8);
+  shopSpot(R, -hw + 4.8, hd - 1.0, '🎟️', 'Buy a train ticket', 'train', 1.8, 'Nilambur Road booking office');
 }

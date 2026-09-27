@@ -751,3 +751,39 @@ body, html {
 }
 #spot-prompt.show { opacity: 1; transform: translate(-50%, 0); }
 #spot-prompt .key-badge { margin-right: 6px; }
+
+/* ---------- Economy: wallet, shop counter, bag, jobs (economy.js) ---------- */
+#btn-wallet { position: relative; }
+.bag-count { background: var(--accent-gold); color: #1a1a1a; border-radius: 9px; padding: 0 6px; font-size: 11px; font-weight: 800; }
+.wallet-flash { position: absolute; left: 50%; top: 100%; transform: translate(-50%, -4px); font-weight: 800; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.4s; white-space: nowrap; }
+.wallet-flash.show { opacity: 1; transform: translate(-50%, 6px); }
+.wallet-flash.good { color: #69f0ae; } .wallet-flash.bad { color: #ff8a80; }
+#btn-jobs.pulse { animation: jobsPulse 1.6s ease-in-out infinite; }
+@keyframes jobsPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 213, 79, 0); } 50% { box-shadow: 0 0 0 4px rgba(255, 213, 79, 0.55); } }
+.econ-box { width: 560px; }
+.econ-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.shop-list, .jobs-list { overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-top: 6px; min-height: 60px; }
+.shop-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); }
+.shop-row.soldout { opacity: 0.5; }
+.shop-emoji { font-size: 20px; width: 26px; text-align: center; }
+.shop-name { flex: 1; font-size: 13px; color: var(--text-main); }
+.shop-name small { display: block; font-size: 11px; color: var(--text-muted); }
+.shop-price { font-weight: 700; color: var(--accent-gold); font-size: 13px; min-width: 70px; text-align: right; }
+.shop-step { display: flex; align-items: center; gap: 6px; }
+.btn-step { width: 26px; height: 26px; border-radius: 7px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.08); color: #fff; cursor: pointer; font-size: 15px; }
+.btn-step:disabled { opacity: 0.35; cursor: default; }
+.shop-qty { min-width: 22px; text-align: center; font-weight: 700; font-size: 13px; color: var(--text-main); }
+.shop-foot { display: flex; align-items: center; gap: 14px; margin-top: 12px; font-size: 13px; color: var(--text-main); }
+.shop-foot #shop-total { font-weight: 800; margin-left: auto; }
+.shop-msg { font-size: 12.5px; margin-top: 8px; color: #b9f6ca; min-height: 16px; }
+.shop-msg.warn { color: #ffcc80; }
+.btn-use { padding: 4px 10px; font-size: 12px; }
+.job-card { padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); display: flex; flex-direction: column; gap: 5px; }
+.job-card.active { border: 1px solid var(--accent-gold); }
+.job-title { font-weight: 700; font-size: 14px; color: var(--text-main); display: flex; justify-content: space-between; }
+.job-pay { color: var(--accent-gold); }
+.job-desc { font-size: 12.5px; color: var(--text-main); opacity: 0.9; }
+.job-meta { font-size: 11px; color: var(--text-muted); }
+.job-card .btn-teleport { align-self: flex-start; }
+#job-hud { position: fixed; left: 50%; top: 104px; transform: translateX(-50%); padding: 8px 16px; border-radius: 12px; font-size: 13px; font-weight: 600; color: var(--text-main); z-index: 30; max-width: min(640px, 90vw); text-align: center; display: none; }
+#job-hud.show { display: block; }

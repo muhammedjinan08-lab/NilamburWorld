@@ -751,8 +751,8 @@ function buildTownMarket() {
     F.box('cloth', 3.2, 0.06, 1.5, x, 1.18, z, 0xe8e8e0);
     for (let k = 0; k < 9; k++) {
       const fish = (r === 1 && i >= 3);
-      if (fish) F.sph('metal', 0.2, x - 1.0 + (k % 5) * 0.5, 1.3, z - 0.3 + Math.floor(k / 5) * 0.6, 0x9aa8b4, 0.4);
-      else F.sph('cloth', 0.2, x - 1.1 + (k % 5) * 0.55, 1.33, z - 0.3 + Math.floor(k / 5) * 0.55, veg[(i * 2 + k) % veg.length], 0.85);
+      if (fish) continue;   // real fish on ice come from economy.js (buildFishStalls)
+      F.sph('cloth', 0.2, x - 1.1 + (k % 5) * 0.55, 1.33, z - 0.3 + Math.floor(k / 5) * 0.55, veg[(i * 2 + k) % veg.length], 0.85);
     }
     F.box('cloth', 0.6, 0.55, 0.5, x + 1.6, 0.5, z + 0.9, veg[(i + r) % veg.length]);
   }
