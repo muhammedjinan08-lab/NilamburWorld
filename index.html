@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0a1d12">
   <title>NilamburWorld — Open World Exploration Game</title>
   <meta name="description" content="Explore Nilambur, Kerala in an open-world 3D game featuring Teak Forests, Canoly Hanging Bridge, Chaliyar River, Teak Museum, and Adyanpara Waterfalls.">
   <link rel="stylesheet" href="styles.css">
@@ -97,6 +100,9 @@
         <button class="btn-teleport" data-location="market">🐟 Fish Market</button>
         <button class="btn-teleport" data-location="temple">🛕 Temple</button>
         <button class="btn-teleport" data-location="kayak">🛶 Kayak Dock</button>
+        <button class="btn-teleport" data-location="garage">🔧 Auto Garage</button>
+        <button class="btn-teleport" data-location="helipad">🚁 Helipad</button>
+        <button class="btn-teleport" data-location="football">⚽ Football Ground</button>
       </div>
     </div>
   </aside>
@@ -316,10 +322,18 @@
       </div>
       <div id="map-canvas-wrap">
         <canvas id="map-canvas-full"></canvas>
+        <div class="map-zoom">
+          <button type="button" id="map-zoom-in" title="Zoom in">+</button>
+          <button type="button" id="map-zoom-out" title="Zoom out">−</button>
+          <button type="button" id="map-zoom-reset" title="Show the whole world">⤢</button>
+          <span id="map-zoom-level"></span>
+        </div>
       </div>
       <div class="map-legend">
-        <span><i class="map-dot" style="background:#FFB300"></i> Discovered landmark</span>
-        <span><i class="map-dot" style="background:#81C784"></i> Undiscovered landmark</span>
+        <span><i class="map-dot" style="background:#FFB300"></i> Discovered place (icon shows what it is)</span>
+        <span><i class="map-dot" style="background:#81C784"></i> Not yet discovered</span>
+        <span>🔧 Garage · 🚁 Helipad / helicopter in flight · ⚽ Football ground</span>
+        <span><i class="map-dot" style="background:#FFD54F;border-radius:2px;transform:rotate(45deg)"></i> Current job target</span>
         <span><i class="map-dot sq" style="background:#B0BEC5"></i> Train station</span>
         <span><i class="map-dot sq" style="background:#FFD54F"></i> Train at station (boardable)</span>
         <span><i class="map-dot" style="background:#E53935"></i> Train (moving)</span>
@@ -338,6 +352,7 @@
   <script src="economy.js"></script>
   <script src="motors.js"></script>
   <script src="football.js"></script>
+  <script src="mobile.js"></script>
   <script src="main.js"></script>
   <script src="multiplayer.js"></script>
 </body>

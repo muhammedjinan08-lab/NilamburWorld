@@ -182,8 +182,31 @@ const LANDMARKS = {
     pos: { x: -16, z: 40 },
     radius: 18,
     questId: "quest_kayak"
+  },
+  garage: {
+    name: "Malabar Auto Garage",
+    desc: "Drive any car, auto, bike or bus into the bay and press G: paint, engine tuning, nitro, spoiler, neon and suspension.",
+    pos: { x: 836, z: 60 },
+    radius: 16,
+    questId: "quest_garage"
+  },
+  helipad: {
+    name: "Nilambur Heli Services",
+    desc: "Hire a helicopter (₹500 cash per flight) and fly anywhere over Nilambur.",
+    pos: { x: 842, z: -60 },
+    radius: 20,
+    questId: "quest_heli"
+  },
+  football: {
+    name: "Nilambur Football Ground",
+    desc: "5-a-side matches with other explorers: join the queue - 6 players start a 7-minute match.",
+    pos: { x: 658, z: 403 },
+    radius: 26,
+    questId: "quest_football"
   }
 };
+// Map icons for each place (full map and minimap)
+const LM_ICON = { conolly: '🌳', bridge: '🌉', museum: '🏛️', waterfall: '🌊', palace: '👑', railway: '🚉', town: '🏘️', busstation: '🚌', market: '🐟', temple: '🛕', church: '⛪', mosque: '🕌', techbazaar: '💻', police: '👮', firestation: '🚒', hospital: '🏥', school: '🏫', postoffice: '✉️', kseb: '💡', bank: '🏦', theatre: '🎬', fuelstation: '⛽', kayak: '🛶', garage: '🔧', helipad: '🚁', football: '⚽' };
 
 // Where fast travel drops the player relative to each landmark centre
 const TELEPORT = {
@@ -197,7 +220,10 @@ const TELEPORT = {
   busstation: { dx: 0, dz: -15 },
   market: { dx: -18, dz: 0 },
   temple: { dx: -14, dz: 0 },
-  kayak: { dx: 3, dz: 2 }
+  kayak: { dx: 3, dz: 2 },
+  garage: { dx: -16, dz: 0 },
+  helipad: { dx: -24, dz: 0 },
+  football: { dx: 0, dz: 17 }
 };
 
 // Quests Data
@@ -223,7 +249,10 @@ const QUESTS = [
   { id: "quest_bank", title: "Bank Errand", desc: "Visit the Nilambur Co-op Bank.", score: 50, done: false },
   { id: "quest_theatre", title: "Movie Night", desc: "Catch a show at Sreedhar Theatre.", score: 70, done: false },
   { id: "quest_fuel", title: "Fill 'Er Up", desc: "Visit the Fuel Station.", score: 50, done: false },
-  { id: "quest_kayak", title: "Paddle the Chaliyar", desc: "Rent a kayak at the riverside dock and get out on the water.", score: 150, done: false }
+  { id: "quest_kayak", title: "Paddle the Chaliyar", desc: "Rent a kayak at the riverside dock and get out on the water.", score: 150, done: false },
+  { id: "quest_garage", title: "Pit Stop", desc: "Find Malabar Auto Garage east of town.", score: 80, done: false },
+  { id: "quest_heli", title: "Take to the Skies", desc: "Visit Nilambur Heli Services.", score: 100, done: false },
+  { id: "quest_football", title: "Kick-off", desc: "Visit the Nilambur Football Ground.", score: 80, done: false }
 ];
 
 // Three.js Core Variables
@@ -270,7 +299,8 @@ function init() {
 
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setSize(window.innerWidth, window.innerHeight);
-  baseRatio = Math.min(window.devicePixelRatio, 1.75);
+  // Phones/tablets (mobile.js): fewer pixels - their GPUs are far weaker than their screens are dense
+  baseRatio = Math.min(window.devicePixelRatio, typeof IS_TOUCH !== 'undefined' && IS_TOUCH ? 1.25 : 1.75);
   renderer.setPixelRatio(baseRatio);
   renderer.outputEncoding = THREE.sRGBEncoding;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -330,7 +360,7 @@ function buildWorld() {
 
   sunLight = new THREE.DirectionalLight(0xfff0d8, 2.4);
   sunLight.castShadow = true;
-  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.mapSize.set(typeof IS_TOUCH !== 'undefined' && IS_TOUCH ? 1024 : 2048, typeof IS_TOUCH !== 'undefined' && IS_TOUCH ? 1024 : 2048);
   const d = 105;
   Object.assign(sunLight.shadow.camera, { left: -d, right: d, top: d, bottom: -d, near: 20, far: 900 });
   sunLight.shadow.bias = -0.0004;
@@ -1184,6 +1214,9 @@ function updatePlayerMovement(dt) {
   if (keyState['KeyS'] || keyState['ArrowDown']) inF -= 1;
   if (keyState['KeyD'] || keyState['ArrowRight']) inR += 1;
   if (keyState['KeyA'] || keyState['ArrowLeft']) inR -= 1;
+  // Touch joystick (mobile.js): analog direction and pace
+  const ta = window.touchAxis;
+  if (ta && (ta.x || ta.y)) { inF = -ta.y; inR = ta.x; speed *= Math.min(1, Math.hypot(ta.x, ta.y) * 1.25); }
 
   const p = parent.position;
   const wading = groundHeight(p.x, p.z) < WATER_Y - 0.2;
@@ -1444,6 +1477,39 @@ function drawMapContent(ctx, w, h, mapX, mapZ, sc, labels) {
   ctx.stroke();
   ctx.setLineDash([]);
 
+  // New facilities drawn to scale: football pitch, helipad, garage
+  {
+    const rect = (cx, cz, hw, hd, fill, stroke) => {
+      const x0 = mapX(cx - hw), x1 = mapX(cx + hw), z0 = mapZ(cz - hd), z1 = mapZ(cz + hd);
+      ctx.fillStyle = fill; ctx.fillRect(x0, z0, x1 - x0, z1 - z0);
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.strokeRect(x0, z0, x1 - x0, z1 - z0); }
+    };
+    rect(658, 403, 20, 12, 'rgba(60,170,80,0.85)', 'rgba(255,255,255,0.8)');
+    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.beginPath(); line(658, 391, 658, 415); ctx.stroke();
+    rect(842, -60, 18.5, 11, 'rgba(120,120,115,0.9)', 'rgba(255,213,79,0.9)');
+    rect(836, 60, 7, 6, 'rgba(200,190,170,0.9)', 'rgba(255,255,255,0.6)');
+  }
+
+  // Zoomed in far enough: every building's footprint (the walk-in rooms from interiors.js), named
+  // once there's room for the text
+  if (sc > 0.9 && typeof ROOMS !== 'undefined') {
+    const seen = new Set();
+    ROOMS.forEach(r => {
+      const x0 = mapX(r.room[0]), x1 = mapX(r.room[1]), z0 = mapZ(r.room[2]), z1 = mapZ(r.room[3]);
+      if (x1 < 0 || x0 > w || z1 < 0 || z0 > h) return;
+      ctx.fillStyle = r.open ? 'rgba(120,140,110,0.45)' : 'rgba(150,135,110,0.75)';
+      ctx.fillRect(x0, z0, Math.max(2, x1 - x0), Math.max(2, z1 - z0));
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1; ctx.strokeRect(x0, z0, x1 - x0, z1 - z0);
+      const key = r.name + Math.round((x0 + x1) / 40) + Math.round((z0 + z1) / 40);
+      if (sc > 2.2 && !seen.has(key)) {
+        seen.add(key);
+        ctx.font = '10px Segoe UI, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#e8e2d0';
+        const name = r.name.length > 22 ? r.name.slice(0, 21) + '…' : r.name;
+        ctx.fillText(name, (x0 + x1) / 2, (z0 + z1) / 2 + 3);
+      }
+    });
+  }
+
   // Draw Landmark Markers (those off the map are pinned to its edge - skip their label there,
   // there's no room to place text meaningfully once a marker has been clamped to the border)
   for (const key in LANDMARKS) {
@@ -1456,8 +1522,14 @@ function drawMapContent(ctx, w, h, mapX, mapZ, sc, labels) {
     ctx.globalAlpha = off ? 0.55 : 1;
     ctx.fillStyle = discovered ? '#FFB300' : '#81C784';
     ctx.beginPath();
-    ctx.arc(lx, lz, off ? 3 : 5, 0, Math.PI * 2);
+    ctx.arc(lx, lz, off ? 3 : (w < 400 ? 6 : 10), 0, Math.PI * 2);
     ctx.fill();
+    if (!off && LM_ICON[key]) {   // the place's icon on its gold (discovered) / green disc
+      ctx.font = (w < 400 ? 9 : 13) + 'px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(LM_ICON[key], lx, lz + 0.5);
+      ctx.textBaseline = 'alphabetic';
+    }
     ctx.globalAlpha = 1;
     // Labelled above the marker (stations/train are labelled below theirs) so landmarks that
     // sit close to the railway - several do - don't get their name tags overlapping.
@@ -1482,6 +1554,15 @@ function drawMapContent(ctx, w, h, mapX, mapZ, sc, labels) {
       tag(tx, tz - 16, 'Train', '#FF8A80');
     }
   }
+
+  // Helicopters in the air (yours or anyone else's)
+  if (typeof VEHICLES !== 'undefined') VEHICLES.forEach(v => {
+    if (v.type !== 'heli' || !v.occupied) return;
+    const hx = mapX(v.x), hz = mapZ(v.z);
+    if (hx < 0 || hx > w || hz < 0 || hz > h) return;
+    ctx.font = (w < 400 ? 12 : 16) + 'px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🚁', hx, hz); ctx.textBaseline = 'alphabetic';
+  });
 
   if (window.NW && NW.drawMinimap) NW.drawMinimap(ctx, mapX, mapZ, { w, h, tag });
   if (typeof drawJobOnMap === 'function') drawJobOnMap(ctx, mapX, mapZ);
@@ -1512,9 +1593,60 @@ function updateMinimap() {
   if (minimapCtx) {
     const w = 280, h = 200;
     const psx = state.playerPos.x, psz = state.playerPos.z, sc = w / 600;
-    drawMapContent(minimapCtx, w, h, (x) => (x - psx) * sc + w / 2, (z) => (z - psz) * sc + h / 2, sc, true);
+    // (no text labels on a phone's tiny minimap - the icons say enough; the full map has them)
+    drawMapContent(minimapCtx, w, h, (x) => (x - psx) * sc + w / 2, (z) => (z - psz) * sc + h / 2, sc, !(typeof IS_TOUCH !== 'undefined' && IS_TOUCH));
   }
   if (mapModalOpen) updateFullMap();
+}
+
+const mapView = { zoom: 1, px: 0, pz: 0, sc: 1, cx: 0, cz: 0 };
+// Zoom the full map about a point on the canvas (canvas pixel coordinates)
+function zoomFullMapAt(factor, canvasX, canvasY) {
+  const c = fullMapCtx.canvas, w = c.width, h = c.height;
+  const wx = (canvasX - w / 2) / mapView.sc + mapView.cx, wz = (canvasY - h / 2) / mapView.sc + mapView.cz;   // world point under the cursor
+  mapView.zoom = clamp(mapView.zoom * factor, 1, 14);
+  updateFullMap();
+  // keep that world point under the cursor
+  mapView.px += wx - ((canvasX - w / 2) / mapView.sc + mapView.cx);
+  mapView.pz += wz - ((canvasY - h / 2) / mapView.sc + mapView.cz);
+  if (mapView.zoom <= 1) { mapView.px = 0; mapView.pz = 0; }
+  updateFullMap();
+}
+function initFullMapControls() {
+  const c = document.getElementById('map-canvas-full'); if (!c) return;
+  const toCanvas = (clientX, clientY) => { const r = c.getBoundingClientRect(); return [(clientX - r.left) * c.width / r.width, (clientY - r.top) * c.height / r.height]; };
+  const pan = (dxPx, dyPx) => { const r = c.getBoundingClientRect(); mapView.px -= dxPx * c.width / r.width / mapView.sc; mapView.pz -= dyPx * c.height / r.height / mapView.sc; updateFullMap(); };
+  c.addEventListener('wheel', (e) => { e.preventDefault(); const p = toCanvas(e.clientX, e.clientY); zoomFullMapAt(e.deltaY < 0 ? 1.25 : 0.8, p[0], p[1]); }, { passive: false });
+  c.addEventListener('dblclick', (e) => { const p = toCanvas(e.clientX, e.clientY); zoomFullMapAt(2, p[0], p[1]); });
+  let drag = null;
+  c.addEventListener('mousedown', (e) => { drag = { x: e.clientX, y: e.clientY }; });
+  window.addEventListener('mousemove', (e) => { if (!drag || !mapModalOpen) return; pan(e.clientX - drag.x, e.clientY - drag.y); drag = { x: e.clientX, y: e.clientY }; });
+  window.addEventListener('mouseup', () => { drag = null; });
+  // touch: one finger pans, two fingers pinch; a quick double tap zooms in
+  const pts = new Map(); let pinch = 0, lastTap = 0;
+  c.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) pts.set(t.identifier, [t.clientX, t.clientY]);
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a[0] - b[0], a[1] - b[1]); }
+    if (pts.size === 1) { const now = performance.now(), t = e.changedTouches[0]; if (now - lastTap < 300) { const p = toCanvas(t.clientX, t.clientY); zoomFullMapAt(2, p[0], p[1]); } lastTap = now; }
+  }, { passive: false });
+  c.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (pts.size >= 2) {
+      for (const t of e.changedTouches) if (pts.has(t.identifier)) pts.set(t.identifier, [t.clientX, t.clientY]);
+      const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      if (pinch > 0) { const p = toCanvas((a[0] + b[0]) / 2, (a[1] + b[1]) / 2); zoomFullMapAt(d / pinch, p[0], p[1]); }
+      pinch = d;
+      return;
+    }
+    for (const t of e.changedTouches) { const p = pts.get(t.identifier); if (!p) continue; pan(t.clientX - p[0], t.clientY - p[1]); pts.set(t.identifier, [t.clientX, t.clientY]); }
+  }, { passive: false });
+  const end = (e) => { for (const t of e.changedTouches) pts.delete(t.identifier); if (pts.size < 2) pinch = 0; };
+  c.addEventListener('touchend', end); c.addEventListener('touchcancel', end);
+  const zin = document.getElementById('map-zoom-in'), zout = document.getElementById('map-zoom-out'), zreset = document.getElementById('map-zoom-reset');
+  if (zin) zin.addEventListener('click', () => zoomFullMapAt(1.5, c.width / 2, c.height / 2));
+  if (zout) zout.addEventListener('click', () => zoomFullMapAt(1 / 1.5, c.width / 2, c.height / 2));
+  if (zreset) zreset.addEventListener('click', () => { mapView.zoom = 1; mapView.px = 0; mapView.pz = 0; updateFullMap(); });
 }
 
 function updateFullMap() {
@@ -1522,9 +1654,12 @@ function updateFullMap() {
   const w = fullMapCtx.canvas.width, h = fullMapCtx.canvas.height;
   const box = computeFullMapBox();
   const boxW = box.maxX - box.minX, boxH = box.maxZ - box.minZ;
-  const sc = Math.min(w / boxW, h / boxH);
-  const cx = (box.minX + box.maxX) / 2, cz = (box.minZ + box.maxZ) / 2;
+  // Zoom / pan (wheel or pinch, drag, double-click) on top of the fit-everything framing
+  const sc = Math.min(w / boxW, h / boxH) * mapView.zoom;
+  const cx = (box.minX + box.maxX) / 2 + mapView.px, cz = (box.minZ + box.maxZ) / 2 + mapView.pz;
+  mapView.sc = sc; mapView.cx = cx; mapView.cz = cz;
   drawMapContent(fullMapCtx, w, h, (x) => (x - cx) * sc + w / 2, (z) => (z - cz) * sc + h / 2, sc, true);
+  const zb = document.getElementById('map-zoom-level'); if (zb) zb.textContent = mapView.zoom > 1.01 ? Math.round(mapView.zoom * 10) / 10 + '×' : '';
 
   const count = document.getElementById('map-discovered-count');
   if (count) count.innerText = `${state.discoveredLocations.size} / ${Object.keys(LANDMARKS).length} landmarks discovered`;
@@ -1532,6 +1667,12 @@ function updateFullMap() {
 
 function openFullMap() {
   mapModalOpen = true;
+  // On a phone the map fills the screen's own shape instead of a fixed 1000 x 730 frame
+  if (typeof IS_TOUCH !== 'undefined' && IS_TOUCH && fullMapCtx) {
+    const availW = Math.min(1040, window.innerWidth * 0.96) - 30, availH = window.innerHeight * 0.92 - 70;
+    fullMapCtx.canvas.width = 1000;
+    fullMapCtx.canvas.height = Math.round(1000 * Math.max(0.3, Math.min(1.6, availH / availW)));
+  }
   document.getElementById('map-modal').classList.add('open');
   updateFullMap();
 }
@@ -1843,6 +1984,7 @@ function setupEventListeners() {
   const btnMaxMap = document.getElementById('btn-maximize-map');
   if (btnMaxMap) btnMaxMap.addEventListener('click', openFullMap);
   document.getElementById('btn-close-map').addEventListener('click', closeFullMap);
+  initFullMapControls();
   mapModal.addEventListener('click', (e) => { if (e.target === mapModal) closeFullMap(); });
 
   // Initial time display
