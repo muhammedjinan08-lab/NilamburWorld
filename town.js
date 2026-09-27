@@ -31,20 +31,27 @@ function tbPush(key, geo, matrix, hex) {
   (TB[key] || (TB[key] = [])).push({ geo: geo, matrix: matrix, color: hex === undefined ? null : new THREE.Color(hex) });
 }
 
-// Building-local frame: origin at (bx, by, bz), yaw ry. Local +z is the "front".
-function frame(bx, by, bz, ry) {
+// Building-local frame: origin at (bx, by, bz), yaw ry. Local +z is the "front". `sc` (optional) is a
+// uniform scale for everything placed through this frame - used to furnish landmark buildings that are
+// themselves drawn scaled (see frameAt / the museum and palace in world.js).
+// `batch` (optional) names a separate merged mesh (e.g. 'int' for interior furnishings, which don't
+// need to cast sun shadows, or one per far-off landmark so each can be frustum-culled on its own).
+function frame(bx, by, bz, ry, sc, batch) {
+  sc = sc || 1;
   const c = Math.cos(ry), s = Math.sin(ry);
-  const F = { ry: ry, bx: bx, by: by, bz: bz };
-  F.w = function (lx, lz) { return [bx + lx * c + lz * s + OX, bz - lx * s + lz * c]; };
+  const F = { ry: ry, bx: bx, by: by, bz: bz, sc: sc, batch: batch || '' };
+  F.w = function (lx, lz) { lx *= sc; lz *= sc; return [bx + lx * c + lz * s + OX, bz - lx * s + lz * c]; };
   F.put = function (key, geo, lx, ly, lz, hex, rx, lry, rz) {
     const p = F.w(lx, lz);
     _te.set(rx || 0, ry + (lry || 0), rz || 0);
     _tq.setFromEuler(_te);
-    _tv.set(p[0], by + ly, p[1]);
-    tbPush(key, geo, new THREE.Matrix4().compose(_tv, _tq, _ts), hex);
+    _tv.set(p[0], by + ly * sc, p[1]);
+    _ts.set(sc, sc, sc);
+    tbPush(F.batch ? F.batch + '|' + key : key, geo, new THREE.Matrix4().compose(_tv, _tq, _ts), hex);
+    _ts.set(1, 1, 1);
   };
   F.box = function (key, w, h, d, lx, ly, lz, hex, rx, lry, rz) {
-    const g = (key === 'wall' || key === 'conc') ? texBox(w, h, d, 4) : new THREE.BoxGeometry(w, h, d);
+    const g = (key === 'wall' || key === 'conc' || key === 'tile') ? texBox(w, h, d, key === 'tile' ? 2.4 : 4) : new THREE.BoxGeometry(w, h, d);
     F.put(key, g, lx, ly, lz, hex, rx, lry, rz);
   };
   F.cyl = function (key, rt, rb, h, lx, ly, lz, hex, seg, rx, lry, rz) {
@@ -57,10 +64,13 @@ function frame(bx, by, bz, ry) {
   };
   F.col = function (lx, lz, hw, hd) {
     const p = F.w(lx, lz), q = Math.abs(Math.sin(ry)) > 0.7;
+    hw *= sc; hd *= sc;
     addBoxCollider(p[0], p[1], q ? hd : hw, q ? hw : hd);
   };
   return F;
 }
+// Same, but positioned by world coordinates (world.js landmarks aren't in the town's local frame).
+function frameAt(wx, by, wz, ry, sc, batch) { return frame(wx - OX, by, wz, ry, sc, batch); }
 
 // ---------- Sign boards (individual meshes: own texture, glow at night) ----------
 function townSign(F, lines, lx, ly, lz, w, opts) {
@@ -92,7 +102,24 @@ function townMaterials() {
   TM.rubber = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
   TM.vglass = new THREE.MeshStandardMaterial({ color: 0x0f1a22, roughness: 0.08, metalness: 0.4 });
   TM.gold = new THREE.MeshStandardMaterial({ color: 0xd4a017, roughness: 0.3, metalness: 0.9 });
-  TM.key = { wall: TM.wall, roof: TM.roof, wood: TM.wood, conc: TM.conc, metal: TM.metal, cloth: TM.cloth, paint: TM.paint, rubber: TM.rubber, vglass: TM.vglass, gold: TM.gold, glass: M.glass, lamp: M.lampGlow };
+  // Interiors: glazed floor tiles, see-through shop glass (so interiors read from the street), mirrors
+  {
+    const S = 256, c = mkCanvas(S, S), g = c.getContext('2d');
+    const n = 4, t = S / n;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const v = ((i + j) & 1) ? 236 : 222;
+      g.fillStyle = 'rgb(' + v + ',' + (v - 3) + ',' + (v - 10) + ')'; g.fillRect(i * t, j * t, t, t);
+      g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(i * t + 6, j * t + 6, t * 0.35, 3);
+    }
+    g.strokeStyle = 'rgba(120,112,100,0.55)'; g.lineWidth = 2;
+    for (let i = 0; i <= n; i++) { g.beginPath(); g.moveTo(i * t, 0); g.lineTo(i * t, S); g.stroke(); g.beginPath(); g.moveTo(0, i * t); g.lineTo(S, i * t); g.stroke(); }
+    TEX.tile = canvasTex(c);
+  }
+  TM.tile = new THREE.MeshStandardMaterial({ map: TEX.tile, vertexColors: true, roughness: 0.35, metalness: 0.05 });
+  TM.cglass = new THREE.MeshStandardMaterial({ color: 0xbcd8e4, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.22, depthWrite: false });
+  TM.mirror = new THREE.MeshStandardMaterial({ color: 0xdfe9ee, roughness: 0.04, metalness: 0.95 });
+  TM.screen = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.2, emissive: 0x6a8ab0, emissiveIntensity: 0.55 });
+  TM.key = { wall: TM.wall, roof: TM.roof, wood: TM.wood, conc: TM.conc, metal: TM.metal, cloth: TM.cloth, paint: TM.paint, rubber: TM.rubber, vglass: TM.vglass, gold: TM.gold, glass: M.glass, lamp: M.lampGlow, tile: TM.tile, cglass: TM.cglass, mirror: TM.mirror, screen: TM.screen };
 
   // Asphalt with lane markings (u along the road, v across it; one tile = 8 m x road width)
   const mkRoad = (markings) => {
@@ -282,25 +309,52 @@ const KIND_STYLE = {
 };
 const WALLS = [0xf2e6c8, 0xe8c9a0, 0xc9d8c5, 0xf0d0c0, 0xd9e2ee, 0xf4c7c7, 0xf3ecb0, 0xd6c6e6, 0xffffff, 0xe6a97a, 0xbfe0d8, 0xf6d9a4];
 
+// Glazed (air-conditioned) fronts with a glass door vs. the classic Kerala bazaar open front with its
+// rolling shutter pulled up - either way the ground floor is a real, walk-in room (see interiors.js for
+// what's inside). Real-world metres throughout: 3.8 m shop ground floor, 2.4 m clear shutter opening,
+// 3.1 m upper storeys, against 1.72 m avatars.
+const GLAZED_KINDS = { gold: 1, mobile: 1, electronics: 1, pharmacy: 1, optical: 1, bakery: 1, civic: 1 };
+const WALL_T = 0.25, SHOP_FLOOR = 0.5, SHOP_OPEN_H = 2.4, SHOP_PIER = 0.45;
+
 function shopBuilding(o) {
   const F = frame(o.x, TOWN_H, o.z, FACE[o.face]);
-  const w = o.w, d = o.d, fl = o.floors || 2, h1 = o.h1 || 4.4, hu = 3.2, H = h1 + (fl - 1) * hu;
+  const w = o.w, d = o.d, fl = o.floors || 2, h1 = o.h1 || 3.8, hu = 3.1, H = h1 + (fl - 1) * hu;
   const st = KIND_STYLE[o.kind] || KIND_STYLE.civic;
-  const wall = o.wall;
-  const fz = d / 2;
-  F.box('wall', w, H, d, 0, H / 2, 0, wall);
-  F.box('conc', w + 0.1, 0.5, d + 0.1, 0, 0.25, 0, 0x8a8478);
+  const wall = o.wall, t = WALL_T, fz = d / 2;
+  const glazed = o.glazed !== undefined ? !!o.glazed : !!GLAZED_KINDS[o.kind];
+  const openH = o.openH || SHOP_OPEN_H;
+  o.glazedFront = glazed;
+
+  // Plinth, tiled floor, front step
+  F.box('conc', w + 0.1, SHOP_FLOOR, d + 0.1, 0, SHOP_FLOOR / 2, 0, 0x8a8478);
+  F.box('tile', w - 2 * t, 0.03, d - 2 * t, 0, SHOP_FLOOR + 0.015, 0, o.floorTint || 0xffffff);
+  F.box('conc', w - 2 * SHOP_PIER, 0.25, 0.55, 0, 0.125, fz + 0.28, 0x9a9488);
+
+  // Ground-floor shell: back + side walls, corner piers and a lintel framing the front opening
+  const gh = h1 - SHOP_FLOOR, wy = SHOP_FLOOR + gh / 2;
+  F.box('wall', w, gh, t, 0, wy, -fz + t / 2, wall);
+  for (const sx of [-1, 1]) {
+    F.box('wall', t, gh, d, sx * (w / 2 - t / 2), wy, 0, wall);
+    F.box('wall', SHOP_PIER, gh, t, sx * (w / 2 - SHOP_PIER / 2), wy, fz - t / 2, wall);
+  }
+  const openW = w - 2 * SHOP_PIER, openTop = SHOP_FLOOR + openH;
+  F.box('wall', openW, h1 - openTop, t, 0, (openTop + h1) / 2, fz - t / 2, wall);
+  // Ceiling (white) and whatever sits above it: upper storeys (not enterable) or the roof slab
+  F.box('wall', w - 2 * t, 0.05, d - 2 * t, 0, h1 - 0.025, 0, 0xf4f1ea);
+  if (fl > 1) F.box('wall', w, H - h1, d, 0, h1 + (H - h1) / 2, 0, wall);
+  else F.box('wall', w, 0.3, d, 0, h1 - 0.15, 0, wall);
+  F.box('wall', w + 0.1, 0.18, 0.12, 0, h1 + 0.02, fz + 0.03, 0xf6f1e4);   // floor band
   F.box('wall', w + 0.3, 0.26, d + 0.3, 0, H + 0.02, 0, 0xf6f1e4);
   if (o.roof === 'gable') {
     const g = makeGableRoof(w, d, 2.0, 0.2, 1);
     F.put('roof', g.roof, 0, H + 0.15, 0, o.roofTint || 0xffffff);
     F.put('wall', g.gable, 0, H + 0.15, 0, wall);
   } else {
-    const t = 0.22, ph = 0.6;
-    F.box('wall', w + 0.2, ph, t, 0, H + 0.4, fz + 0.05, 0xece6d6);
-    F.box('wall', w + 0.2, ph, t, 0, H + 0.4, -fz - 0.05, 0xece6d6);
-    F.box('wall', t, ph, d + 0.2, w / 2 + 0.05, H + 0.4, 0, 0xece6d6);
-    F.box('wall', t, ph, d + 0.2, -w / 2 - 0.05, H + 0.4, 0, 0xece6d6);
+    const pt = 0.22, ph = 0.6;
+    F.box('wall', w + 0.2, ph, pt, 0, H + 0.4, fz + 0.05, 0xece6d6);
+    F.box('wall', w + 0.2, ph, pt, 0, H + 0.4, -fz - 0.05, 0xece6d6);
+    F.box('wall', pt, ph, d + 0.2, w / 2 + 0.05, H + 0.4, 0, 0xece6d6);
+    F.box('wall', pt, ph, d + 0.2, -w / 2 - 0.05, H + 0.4, 0, 0xece6d6);
     // water tank + stair head
     F.cyl('paint', 0.62, 0.62, 1.1, w * 0.22, H + 1.5, -d * 0.2, 0x1c1c1c, 12);
     F.box('metal', 0.1, 0.9, 0.1, w * 0.22 + 0.4, H + 0.9, -d * 0.2 + 0.4, 0x555555);
@@ -308,36 +362,60 @@ function shopBuilding(o) {
     if (w > 8) F.box('wall', 2.2, 2.4, 2.2, -w * 0.3, H + 1.3, -d * 0.15, wall);
   }
 
-  // Ground floor: glazed shop front, door, rolled shutter and striped awning
-  const fw = w - 1.6;
-  F.box('wood', fw + 0.3, 3.05, 0.14, 0, 1.85, fz + 0.02, 0x5a3a20);
-  F.box('glass', fw, 2.75, 0.2, 0, 1.85, fz + 0.06);
-  F.box('wood', 1.05, 2.5, 0.24, fw / 2 - 1.1, 1.55, fz + 0.07, 0x4a2c14);
-  F.box('metal', fw + 0.3, 0.42, 0.28, 0, 3.55, fz + 0.12, 0x9ca3a8);
+  // Front: glass + a (propped-open) double door, or the open bay with its rolled-up shutter
+  const fzIn = fz - t / 2;
+  if (glazed) {
+    const doorW = 1.6, x0 = -openW / 2, x1 = openW / 2, dl = -doorW / 2, dr = doorW / 2;
+    for (const [a, b] of [[x0, dl], [dr, x1]]) {
+      const cx = (a + b) / 2, pw = b - a;
+      F.box('cglass', pw, openH, 0.06, cx, SHOP_FLOOR + openH / 2, fzIn);
+      F.box('metal', pw, 0.08, 0.1, cx, SHOP_FLOOR + 0.04, fzIn, 0xb8bec4);
+      F.box('metal', pw, 0.08, 0.1, cx, SHOP_FLOOR + 1.0, fzIn, 0xb8bec4);
+      F.col(cx, fzIn, pw / 2, t / 2);
+    }
+    for (const x of [x0, dl, dr, x1]) F.box('metal', 0.08, openH, 0.12, x, SHOP_FLOOR + openH / 2, fzIn, 0xb8bec4);
+    F.box('metal', openW, 0.1, 0.12, 0, openTop - 0.05, fzIn, 0xb8bec4);
+    // door leaves swung open against the glass
+    for (const sx of [-1, 1]) F.box('cglass', 0.74, openH - 0.1, 0.05, sx * (doorW / 2 + 0.05), SHOP_FLOOR + openH / 2, fzIn - 0.42, undefined, 0, sx * 1.35);
+  } else {
+    F.cyl('metal', 0.2, 0.2, openW + 0.2, 0, openTop + 0.14, fz + 0.02, 0x8f969c, 10, 0, 0, Math.PI / 2);   // shutter roll
+    for (const sx of [-1, 1]) F.box('metal', 0.07, openH, 0.07, sx * (openW / 2 - 0.04), SHOP_FLOOR + openH / 2, fz - 0.02, 0x8f969c);   // shutter guides
+  }
+  // Striped awning just above the opening, sign board above that
   const n = Math.max(4, Math.round(w / 1.25) & ~1), sw = w / n;
-  for (let i = 0; i < n; i++) F.box('cloth', sw, 0.05, 1.7, -w / 2 + sw * (i + 0.5), 3.42, fz + 0.85, st.awn[i % 2], 0.3);
-  townSign(F, [o.name, o.sub], 0, h1 - 0.5, fz + 0.1, Math.min(w - 1.6, 7.4), { bg: st.bg, fg: st.fg, border: st.border });
+  for (let i = 0; i < n; i++) F.box('cloth', sw, 0.05, 1.5, -w / 2 + sw * (i + 0.5), openTop + 0.18, fz + 0.75, st.awn[i % 2], 0.3);
+  const signW = Math.min(w - 1.6, 7.4), signH = signW * 110 / 640;
+  const signMax = fl > 1 ? h1 + hu / 2 - 1.03 - signH / 2 : 99;   // stay under the first-floor windows
+  const signY = Math.min(openTop + 0.42 + signH / 2, signMax);
+  townSign(F, [o.name, o.sub], 0, signY, fz + 0.1, signW, { bg: st.bg, fg: st.fg, border: st.border });
   if (o.kind === 'pharmacy') {
-    F.box('cloth', 0.9, 0.3, 0.06, w / 2 - 0.85, h1 - 0.5, fz + 0.2, 0x159a7e);
-    F.box('cloth', 0.3, 0.9, 0.06, w / 2 - 0.85, h1 - 0.5, fz + 0.2, 0x159a7e);
+    F.box('cloth', 0.9, 0.3, 0.06, w / 2 - 0.85, signY, fz + 0.2, 0x159a7e);
+    F.box('cloth', 0.3, 0.9, 0.06, w / 2 - 0.85, signY, fz + 0.2, 0x159a7e);
   }
   // Upper floors
   for (let f = 1; f < fl; f++) {
     const y = h1 + (f - 1) * hu + hu / 2 + 0.05, cnt = Math.max(2, Math.floor(w / 3.2));
     for (let j = 0; j < cnt; j++) {
       const x = -w / 2 + w * (j + 0.5) / cnt;
-      F.box('wood', 1.7, 1.95, 0.14, x, y, fz + 0.03, 0x6a4a2a);
-      F.box('glass', 1.35, 1.6, 0.18, x, y, fz + 0.06);
-      F.box('conc', 1.95, 0.12, 0.4, x, y - 1.05, fz + 0.15, 0xcfc8b8);
-      F.box('wood', 0.06, 1.6, 0.2, x, y, fz + 0.09, 0x6a4a2a);
+      F.box('wood', 1.5, 1.8, 0.14, x, y, fz + 0.03, 0x6a4a2a);
+      F.box('glass', 1.2, 1.5, 0.18, x, y, fz + 0.06);
+      F.box('conc', 1.75, 0.12, 0.4, x, y - 0.97, fz + 0.15, 0xcfc8b8);
+      F.box('wood', 0.06, 1.5, 0.2, x, y, fz + 0.09, 0x6a4a2a);
     }
-    F.box('wall', w + 0.1, 0.18, 0.12, 0, h1 + (f - 1) * hu + 0.02, fz + 0.03, 0xf6f1e4);
+    if (f > 1) F.box('wall', w + 0.1, 0.18, 0.12, 0, h1 + (f - 1) * hu + 0.02, fz + 0.03, 0xf6f1e4);
   }
-  shopGoods(F, o, fz, w, h1);
-  if (o.extra) o.extra(F, fz, w, d, H);
+  if (!glazed) shopGoods(F, o, fz, w, h1);
+  if (o.extra) o.extra(F, fz, w, d, H, h1);
 
-  const sideways = (o.face === 'e' || o.face === 'w');
-  colBox(o.x, o.z, (sideways ? d : w) / 2, (sideways ? w : d) / 2);
+  // Colliders: back, sides, corner piers (the front opening / door is left clear)
+  F.col(0, -fz + t / 2, w / 2, t / 2);
+  for (const sx of [-1, 1]) {
+    F.col(sx * (w / 2 - t / 2), 0, t / 2, d / 2);
+    F.col(sx * (w / 2 - SHOP_PIER / 2), fzIn, SHOP_PIER / 2, t / 2);
+  }
+  // Walkable floor (whole footprint + front step) and the room the camera stays inside
+  registerRoom(F, 0, 0, w / 2 - t, d / 2 - t, SHOP_FLOOR, h1, o.name, o.kind, { floorHW: w / 2, floorHD: d / 2, stepD: 0.55 });
+  if (typeof furnishShop === 'function') furnishShop(F, o, w, d, h1);
 }
 
 function shopGoods(F, o, fz, w, h1) {
@@ -588,7 +666,7 @@ function buildTownShops(rng) {
 }
 
 function civic(o) {
-  o.kind = 'civic'; o.h1 = o.h1 || 4.6;
+  o.kind = 'civic'; o.h1 = o.h1 || 4.0;
   shopBuilding(o);
 }
 
@@ -597,13 +675,13 @@ function buildTownCivic() {
   // Police station (lane, west side)
   civic({
     name: 'POLICE STATION', sub: 'Nilambur · Kerala Police', x: 131.5, z: -34, w: 14, d: 11, face: 'e', floors: 2, roof: 'gable', wall: 0xdfe8f2,
-    extra: (F, fz, w) => { F.box('paint', w, 0.5, 0.06, 0, 4.7 - 0.1, fz + 0.18, 0x1c4fa8); }
+    extra: (F, fz, w, d, H, h1) => { F.box('paint', w, 0.4, 0.06, 0, h1 + 0.22, fz + 0.18, 0x1c4fa8); }
   });
   placeVehicle('van', 0x1c4fa8, 139.6, -30, Math.PI, false);
   // Fire & rescue
   civic({
-    name: 'FIRE & RESCUE STATION', sub: 'Emergency 101', x: 131.5, z: -56, w: 14, d: 11, face: 'e', floors: 1, h1: 5.2, roof: 'flat', wall: 0xf2dcd0,
-    extra: (F, fz, w) => { for (const x of [-3.2, 3.2]) F.box('paint', 4.6, 3.9, 0.12, x, 2.2, fz + 0.16, 0xc8201e); }
+    name: 'FIRE & RESCUE STATION', sub: 'Emergency 101', x: 131.5, z: -56, w: 14, d: 11, face: 'e', floors: 1, h1: 5.0, openH: 3.7, glazed: false, roof: 'flat', wall: 0xf2dcd0,
+    extra: (F, fz, w, d, H, h1) => { F.box('paint', w, 0.35, 0.06, 0, h1 - 0.25, fz + 0.18, 0xc8201e); }
   });
   placeVehicle('van', 0xc8201e, 141.4, -53, Math.PI, false);
   // Taluk hospital
@@ -617,7 +695,7 @@ function buildTownCivic() {
   // Higher secondary school
   civic({ name: 'GOVT. HIGHER SECONDARY SCHOOL', sub: 'Nilambur', x: 131.5, z: 62, w: 18, d: 11, face: 'e', floors: 2, roof: 'gable', wall: 0xf3e2b8 });
   // Post office, KSEB office on the cross road (west of the lane); bank on the east side of the lane
-  civic({ name: 'POST OFFICE', sub: 'Nilambur PO · 679329', x: 131.5, z: -15.5, w: 11, d: 11, face: 's', floors: 2, roof: 'gable', wall: 0xf6ead0, extra: (F, fz, w) => F.box('paint', w, 0.5, 0.06, 0, 4.5, fz + 0.18, 0xc8201e) });
+  civic({ name: 'POST OFFICE', sub: 'Nilambur PO · 679329', x: 131.5, z: -15.5, w: 11, d: 11, face: 's', floors: 2, roof: 'gable', wall: 0xf6ead0, extra: (F, fz, w, d, H, h1) => F.box('paint', w, 0.4, 0.06, 0, h1 + 0.22, fz + 0.18, 0xc8201e) });
   civic({ name: 'KSEB SECTION OFFICE', sub: 'Electricity Board', x: 131.5, z: 15.5, w: 11, d: 11, face: 'n', floors: 2, roof: 'flat', wall: 0xe4e8e0 });
   civic({ name: 'NILAMBUR CO-OP BANK', sub: 'ATM · Locker', x: 152.5, z: -15.5, w: 10, d: 11, face: 's', floors: 3, roof: 'flat', wall: 0xdfe6f2 });
   civic({ name: 'SREEDHAR THEATRE', sub: 'Now Showing · 4 Shows', x: 205.5, z: -15.5, w: 13, d: 11, face: 's', floors: 3, roof: 'flat', wall: 0xead6c8,
@@ -636,6 +714,7 @@ function buildTownBusStation() {
   Fp.box('metal', 23.5, 0.16, 6.8, 0, 4.25, 0, 0x2f6fb0, -0.05);
   for (let x = -8; x <= 8; x += 4) Fp.box('wood', 2.4, 0.08, 0.5, x, 0.72, -0.6, 0x7a5a30);
   for (let x = -8; x <= 8; x += 4) { Fp.box('wood', 2.4, 0.5, 0.06, x, 0.98, -0.85, 0x7a5a30); }
+  busStandPassengers(Fp);
   townSign(Fp, ['KSRTC BUS STATION', 'Nilambur'], 0, 4.95, 3.3, 9, { bg: '#0b3d91', fg: '#ffffff', border: '#ffd166' });
   townSign(Fp, ['ROUTES', 'Manjeri · Kozhikode · Ooty · Gudalur'], -6.5, 2.4, 2.4, 3.6, { bg: '#1f5a3a', fg: '#fff2cc', border: '#fff2cc', size: 34 });
   // The boarding platform is a walkable curb, not a wall - step players up onto it (like the
@@ -651,10 +730,9 @@ function buildTownBusStation() {
   civic({ name: 'KSRTC BUS STATION', sub: 'Nilambur Depot · Enquiry', x: 215, z: 87, w: 22, d: 9, face: 'n', floors: 2, roof: 'flat', wall: 0xf0e6cc });
   // Tea kiosk + waiting shed
   const Fk = frame(227, TOWN_H, 38, -Math.PI / 2);
-  Fk.box('wall', 4, 3, 3.2, 0, 1.5, 0, 0xf0d8a0);
+  buildTeaKiosk(Fk);
   Fk.box('cloth', 4.6, 0.06, 1.6, 0, 3.1, 2.3, 0xc0392b, 0.28);
   townSign(Fk, ['Bus Stand Tea Stall', 'Chaya · Vada'], 0, 3.6, 1.7, 3.8, { bg: '#1f5a3a', fg: '#fff2cc', border: '#fff2cc' });
-  colBox(227, 38, 1.6, 2);
 }
 
 function buildTownMarket() {
@@ -678,7 +756,8 @@ function buildTownMarket() {
     }
     F.box('cloth', 0.6, 0.55, 0.5, x + 1.6, 0.5, z + 0.9, veg[(i + r) % veg.length]);
   }
-  colBox(215, -62, 12, 8);
+  for (let x = -11; x <= 11; x += 5.5) for (const z of [-7.6, 7.6]) F.col(x, z, 0.25, 0.25);
+  furnishMarket(F);
   // Umbrella stalls in the yard
   const cols = [0xd33a3a, 0x2a58d8, 0xe0a020, 0x2ea043];
   for (let i = 0; i < 6; i++) {
@@ -689,6 +768,7 @@ function buildTownMarket() {
     U.box('wood', 2.0, 0.85, 1.0, 0, 0.45, 1.0, 0x8a5a2a);
     for (let k = 0; k < 6; k++) U.sph('cloth', 0.2, -0.75 + (k % 3) * 0.75, 0.98, 0.75 + Math.floor(k / 3) * 0.5, veg[(i + k) % veg.length], 0.85);
     colBox(x, z + 1, 1.0, 0.6);
+    furnishUmbrellaStall(U);
   }
   // Delivery vehicles
   placeVehicle('van', 0xf4f4ee, 203, -42, 0, false);
@@ -708,11 +788,9 @@ function buildTownPetrol() {
     }
   }
   const O = frame(221, TOWN_H, -33, 0);
-  O.box('wall', 6, 3.3, 5, 0, 1.65, 0, 0xf2f0e6);
+  buildFuelOffice(O);
   O.box('wall', 6.3, 0.3, 5.3, 0, 3.4, 0, 0xc8201e);
-  O.box('glass', 4, 1.6, 0.12, 0, 1.6, 2.55);
   townSign(O, ['FUEL STATION', 'Petrol · Diesel · Air'], 0, 4.1, 2.6, 4.6, { bg: '#c8201e', fg: '#ffffff', border: '#ffffff' });
-  colBox(221, -33, 3.1, 2.6);
   F.cyl('metal', 0.1, 0.1, 8, 9.5, 4, 5.5, 0x3a4248, 8);
   townSign(F, ['PETROL 104.7', 'Diesel 93.4'], 9.5, 7.6, 5.55, 2.6, { bg: '#111111', fg: '#ffd24a', border: '#ffd24a', size: 30 });
   placeVehicle('car', 0xe8e8e0, 221, -21, 0, false);
@@ -738,8 +816,19 @@ function buildTownWorship() {
     F.put('wall', gt.gable, 0, 4.4, D, 0xe8dcc0);
     // sanctum
     F.box('conc', 9, 0.7, 9, 0, 0.35, -1, 0xb8b2a4);
-    F.box('wall', 6.4, 3.4, 6.4, 0, 2.4, -1, 0xb39a78);
-    F.box('wood', 1.4, 2.4, 0.2, 0, 1.9, 2.25, 0x3a2412);
+    // Sanctum (sreekovil): hollow, its door open onto the plinth so the deity and lamps are visible
+    const sw = 0xb39a78;
+    F.box('wall', 6.4, 3.4, 0.3, 0, 2.4, -4.05, sw);
+    for (const sx of [-1, 1]) {
+      F.box('wall', 0.3, 3.4, 6.4, sx * 3.05, 2.4, -1, sw);
+      F.box('wall', 2.5, 3.4, 0.3, sx * 1.95, 2.4, 2.05, sw);
+      F.col(sx * 3.05, -1, 0.15, 3.2);
+      F.col(sx * 1.95, 2.05, 1.25, 0.15);
+    }
+    F.col(0, -4.05, 3.2, 0.15);
+    F.box('wall', 1.4, 1.0, 0.3, 0, 3.6, 2.05, sw);
+    F.box('wall', 6.4, 0.12, 6.4, 0, 4.06, -1, 0xd8c8a8);
+    for (const sx of [-1, 1]) F.box('wood', 0.7, 2.4, 0.08, sx * 1.12, 1.9, 1.55, 0x3a2412, 0, sx * 1.2);   // door leaves, swung open
     F.cyl('roof', 0.3, 5.3, 3.0, 0, 5.6, -1, 0xffffff, 4, 0, Math.PI / 4);
     F.cyl('roof', 0.2, 3.4, 2.2, 0, 8.0, -1, 0xffffff, 4, 0, Math.PI / 4);
     F.cyl('gold', 0.08, 0.35, 1.3, 0, 9.7, -1, undefined, 8);
@@ -753,7 +842,8 @@ function buildTownWorship() {
     F.cyl('gold', 0.14, 0.18, 11, -8, 5.5, 3.4, undefined, 8);
     F.sph('gold', 0.3, -8, 11.2, 3.4);
     townSign(F, ['SREE NILAMBUR TEMPLE', 'Vishnu Kshetram'], 0, 5.6, D + 1.2, 7.5, { bg: '#7a1f0a', fg: '#ffe9a8', border: '#ffd166' });
-    F.col(0, -1, 5, 5);
+    registerRoom(F, 0, -1, 4.5, 4.5, 0.7, 99, 'Sree Nilambur Temple', 'temple', { open: true });   // walkable plinth
+    furnishTemple(F, W, D);
     F.col(0, -D, W, 0.4);
     F.col(-W, 0, 0.4, D);
     F.col(W, 0, 0.4, D);
@@ -764,26 +854,59 @@ function buildTownWorship() {
   {
     const F = frame(TC.x - 24, TOWN_H, 100, Math.PI / 2), d = 15, w = 9;
     F.box('conc', w + 1, 0.5, d + 1, 0, 0.25, 0, 0xb8b2a4);
-    F.box('wall', w, 7.2, d, 0, 4.1, 0, 0xf8f4ea);
+    const cw = 0xf8f4ea, ct = 0.3;
+    F.box('wall', w, 7.2, ct, 0, 4.1, -d / 2 + ct / 2, cw);
+    for (const sx of [-1, 1]) {
+      F.box('wall', ct, 7.2, d, sx * (w / 2 - ct / 2), 4.1, 0, cw);
+      F.box('wall', 3.4, 7.2, ct, sx * 2.8, 4.1, d / 2 - ct / 2, cw);
+      F.col(sx * (w / 2 - ct / 2), 0, ct / 2, d / 2);
+      F.col(sx * 2.8, d / 2 - ct / 2, 1.7, ct / 2);
+    }
+    F.col(0, -d / 2 + ct / 2, w / 2, ct / 2);
+    F.box('wall', 2.2, 3.8, ct, 0, 5.8, d / 2 - ct / 2, cw);
+    F.box('wall', w - 0.2, 0.15, d - 0.2, 0, 7.62, 0, 0xfbf8f0);
     const g = makeGableRoof(d, w, 3.4, 0.5, 1);
     F.put('roof', g.roof, 0, 7.7, 0, 0x9a4a3a, 0, Math.PI / 2);
     F.put('wall', g.gable, 0, 7.7, 0, 0xf8f4ea, 0, Math.PI / 2);
-    F.box('wall', 4.4, 13, 4.4, 0, 6.5, d / 2 + 1.6, 0xf8f4ea);
+    // Bell tower: solid above a hollow ground-floor vestibule that leads into the nave
+    F.box('wall', 4.4, 8.8, 4.4, 0, 8.6, d / 2 + 1.6, 0xf8f4ea);
+    for (const sx of [-1, 1]) {
+      F.box('wall', 0.3, 4.2, 4.4, sx * 2.05, 2.1, d / 2 + 1.6, 0xf8f4ea);
+      F.box('wall', 1.1, 4.2, 0.3, sx * 1.65, 2.1, d / 2 + 3.65, 0xf8f4ea);
+      F.col(sx * 2.05, d / 2 + 1.6, 0.15, 2.2);
+      F.col(sx * 1.65, d / 2 + 3.65, 0.55, 0.15);
+    }
+    F.box('wall', 2.2, 0.8, 0.3, 0, 3.8, d / 2 + 3.65, 0xf8f4ea);
+    F.box('conc', 4.1, 0.5, 3.8, 0, 0.25, d / 2 + 1.8, 0xb8b2a4);
+    F.box('conc', 2.2, 0.25, 0.6, 0, 0.125, d / 2 + 4.1, 0x9a9488);
     F.cyl('roof', 0.1, 3.4, 6.5, 0, 16.3, d / 2 + 1.6, 0x9a4a3a, 4, 0, Math.PI / 4);
     F.box('gold', 0.2, 1.6, 0.2, 0, 20.4, d / 2 + 1.6);
     F.box('gold', 0.9, 0.2, 0.2, 0, 20.5, d / 2 + 1.6);
-    F.box('wood', 2.2, 3.4, 0.2, 0, 1.9, d / 2 + 3.85, 0x3a2412);
+    for (const sx of [-1, 1]) F.box('wood', 1.1, 3.4, 0.1, sx * 1.55, 2.2, d / 2 + 3.3, 0x3a2412, 0, sx * 1.3);   // doors, open
     F.cyl('glass', 1.0, 1.0, 0.2, 0, 9.5, d / 2 + 3.8, undefined, 20, Math.PI / 2);
     for (let i = 0; i < 4; i++) for (const s of [-1, 1]) { F.box('wood', 0.9, 2.6, 0.12, s * (w / 2 + 0.02), 4.2, -5 + i * 3.4, 0x3a2412, 0, Math.PI / 2); F.box('glass', 0.6, 2.2, 0.16, s * (w / 2 + 0.05), 4.2, -5 + i * 3.4, undefined, 0, Math.PI / 2); }
     townSign(F, ['ST. THOMAS CHURCH', 'Nilambur · Holy Mass 6:30 / 9:00'], 0, 5.0, d / 2 + 3.95, 4.2, { bg: '#f4f0e4', fg: '#2a1a10', border: '#8a6a3a', size: 32 });
-    F.col(0, 0, w / 2, d / 2);
-    F.col(0, d / 2 + 1.6, 2.2, 2.2);
+    registerRoom(F, 0, 0, w / 2 - 0.3, d / 2 - 0.3, 0.5, 7.55, 'St. Thomas Church', 'church', { floorHW: w / 2, floorHD: d / 2 });
+    registerRoom(F, 0, d / 2 + 1.8, 1.9, 1.75, 0.5, 4.2, 'St. Thomas Church', 'church', { floorHD: 1.9, stepD: 0.6 });
+    furnishChurch(F, w, d);
   }
   // --- Mosque: west of the lane, facing it ---
   {
     const F = frame(LANE_X - 11, TOWN_H, -100, Math.PI / 2), w = 13, d = 11;
     F.box('conc', w + 1, 0.5, d + 1, 0, 0.25, 0, 0xb8b2a4);
-    F.box('wall', w, 6.0, d, 0, 3.5, 0, 0xf8f6ee);
+    const mw = 0xf8f6ee, mt = 0.3;
+    F.box('wall', w, 6.0, mt, 0, 3.5, -d / 2 + mt / 2, mw);
+    for (const sx of [-1, 1]) {
+      F.box('wall', mt, 6.0, d, sx * (w / 2 - mt / 2), 3.5, 0, mw);
+      F.box('wall', 5.7, 6.0, mt, sx * 3.65, 3.5, d / 2 - mt / 2, mw);
+      F.col(sx * (w / 2 - mt / 2), 0, mt / 2, d / 2);
+      F.col(sx * 3.65, d / 2 - mt / 2, 2.85, mt / 2);
+      F.col(sx * (w / 2 + 0.6), d / 2 - 1, 1.0, 1.0);   // minarets
+    }
+    F.col(0, -d / 2 + mt / 2, w / 2, mt / 2);
+    F.box('wall', 1.6, 2.6, mt, 0, 5.2, d / 2 - mt / 2, mw);
+    F.box('wall', w - 0.2, 0.15, d - 0.2, 0, 6.42, 0, 0xfbf8f0);
+    F.box('conc', 1.6, 0.25, 0.6, 0, 0.125, d / 2 + 0.8, 0x9a9488);
     F.box('wall', w + 0.3, 0.35, d + 0.3, 0, 6.6, 0, 0xd8d2c0);
     F.cyl('wall', 4.3, 4.6, 1.0, 0, 7.1, 0, 0xf8f6ee, 20);
     const dome = new THREE.SphereGeometry(4.2, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2);
@@ -796,9 +919,11 @@ function buildTownWorship() {
       F.put('paint', new THREE.SphereGeometry(1.0, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), sx * (w / 2 + 0.6), 13.0, d / 2 - 1, 0x1f7a4a);
       F.cyl('gold', 0.04, 0.1, 1.0, sx * (w / 2 + 0.6), 14.5, d / 2 - 1, undefined, 6);
     }
-    for (let i = -1; i <= 1; i++) { F.box('vglass', 1.6, 3.2, 0.12, i * 3.6, 2.4, d / 2 + 0.06, 0x142a22); F.box('glass', 1.3, 2.6, 0.16, i * 3.6, 2.4, d / 2 + 0.08); }
+    for (const i of [-1, 1]) { F.box('vglass', 1.6, 3.2, 0.12, i * 3.6, 2.4, d / 2 + 0.06, 0x142a22); F.box('glass', 1.3, 2.6, 0.16, i * 3.6, 2.4, d / 2 + 0.08); }
+    F.box('wood', 1.9, 0.18, 0.2, 0, 3.95, d / 2 + 0.08, 0x3a2412);   // door head (the doorway itself stays open)
     townSign(F, ['JUMA MASJID', 'Nilambur'], 0, 5.5, d / 2 + 0.1, 5.2, { bg: '#0f5a34', fg: '#ffffff', border: '#ffd166' });
-    F.col(0, 0, w / 2 + 1.5, d / 2);
+    registerRoom(F, 0, 0, w / 2 - 0.3, d / 2 - 0.3, 0.5, 6.35, 'Juma Masjid', 'mosque', { floorHW: w / 2, floorHD: d / 2, stepD: 1.1 });
+    furnishMosque(F, w, d);
   }
 }
 
@@ -940,6 +1065,7 @@ function updateTown(dt, t) {
     const ang = Math.atan2((w.b[0] - w.a[0]) * w.dir, (w.b[1] - w.a[1]) * w.dir);
     const bob = Math.abs(Math.sin(t * 5.5 * w.sp + w.ph)) * 0.06;
     _o.position.set(x + OX, PAVE_Y + TOWN_H + bob, z);
+    _o.scale.setScalar(0.88);   // geometry tops out at 1.96 m - scaled to a real ~1.72 m adult
     _o.rotation.set(0, ang, Math.sin(t * 5.5 * w.sp + w.ph) * 0.04);
     _o.updateMatrix();
     P.torso.setMatrixAt(i, _o.matrix); P.legs.setMatrixAt(i, _o.matrix); P.head.setMatrixAt(i, _o.matrix);
@@ -949,12 +1075,14 @@ function updateTown(dt, t) {
 
 // ---------- Entry point ----------
 function flushTownBatches() {
-  for (const key in TB) {
-    const geo = mergeGeos(TB[key]);
+  for (const bk in TB) {
+    const bar = bk.indexOf('|'), batch = bar < 0 ? '' : bk.slice(0, bar), key = bar < 0 ? bk : bk.slice(bar + 1);
+    const geo = mergeGeos(TB[bk]);
     const m = new THREE.Mesh(geo, TM.key[key]);
-    m.castShadow = true;
+    m.castShadow = !batch.startsWith('int');   // furnishings sit under roofs - no sun shadows needed
     m.receiveShadow = true;
     scene.add(m);
+    delete TB[bk];
   }
 }
 

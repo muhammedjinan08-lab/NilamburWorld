@@ -957,19 +957,31 @@ function buildConollyTeakPlot() {
 }
 
 // ---------- Landmark: Teak Museum ----------
+// Built in "design units" and then scaled by MUSEUM_S so the real building ends up real-world size
+// (~12 m to the ridge, a 3.7 m entrance) - unscaled it stood ~20 m tall, half the height of the
+// waterfall, and dwarfed the 1.72 m avatars. The hall is hollow and furnished (interiors.js).
+const MUSEUM_S = 0.62;
 function buildTeakMuseum() {
   const g = new THREE.Group();
   const p = LANDMARKS.museum.pos;
   const y0 = LM_H.museum;
   g.position.set(p.x, y0, p.z);
-  const PL = 0.7;
+  const PL = 0.7, S = MUSEUM_S;
 
   g.add(mk(texBox(38, PL, 28, 3), M.stone, 0, PL / 2, 2));
   g.add(mk(texBox(12, 0.45, 1.2, 3), M.stone, 0, 0.225, 16.6, false, true));
   g.add(mk(texBox(12, 0.22, 1.2, 3), M.stone, 0, 0.11, 17.6, false, true));
 
-  // Teak-plank walls with plaster pilasters
-  g.add(mk(texBox(30, 10, 20, 3.2), M.wood, 0, PL + 5, 0));
+  // Teak-plank walls with plaster pilasters: a hollow hall with a real doorway
+  const WT = 0.4;
+  g.add(mk(texBox(30, 10, WT, 3.2), M.wood, 0, PL + 5, -10 + WT / 2));
+  for (const sx of [-1, 1]) {
+    g.add(mk(texBox(WT, 10, 20, 3.2), M.wood, sx * (15 - WT / 2), PL + 5, 0));
+    g.add(mk(texBox(12.7, 10, WT, 3.2), M.wood, sx * 8.65, PL + 5, 10 - WT / 2));
+  }
+  g.add(mk(texBox(4.6, 4, WT, 3.2), M.wood, 0, PL + 8, 10 - WT / 2));
+  g.add(mk(texBox(29.2, 0.3, 19.2, 3), M.woodDark, 0, PL + 9.85, 0, false, true));   // ceiling
+  g.add(mk(texBox(29.2, 0.05, 19.2, 2.5), M.wood, 0, PL + 0.025, 0, false, true));   // teak floor
   for (let x = -15; x <= 15; x += 7.5) {
     g.add(mk(texBox(0.9, 10.2, 0.9, 3), M.plaster, x, PL + 5.1, 10.15));
   }
@@ -997,9 +1009,8 @@ function buildTeakMuseum() {
   // Floor of verandah
   g.add(mk(texBox(32, 0.15, 5, 2.5), M.wood, 0, PL + 0.08, 12.6, false, true));
 
-  // Doors and windows
-  g.add(mk(new THREE.BoxGeometry(4.6, 6, 0.3), M.woodDark, 0, PL + 3, 10.1));
-  g.add(mk(new THREE.BoxGeometry(0.15, 6, 0.4), M.wood, 0, PL + 3, 10.15));
+  // Doors (standing open) and windows
+  for (const sx of [-1, 1]) { const dl = mk(new THREE.BoxGeometry(2.3, 6, 0.2), M.woodDark, sx * 2.9, PL + 3, 8.9); dl.rotation.y = sx * 1.3; g.add(dl); }
   for (const x of [-11, -6.5, 6.5, 11]) {
     g.add(mk(new THREE.BoxGeometry(2.4, 3.2, 0.2), M.glass, x, PL + 5, 10.1));
     g.add(mk(new THREE.BoxGeometry(2.8, 0.25, 0.4), M.woodDark, x, PL + 6.7, 10.15));
@@ -1036,26 +1047,43 @@ function buildTeakMuseum() {
     g.add(mk(new THREE.SphereGeometry(0.3, 8, 8), M.lampGlow, x, 3.1, 17.5, false));
   }
 
+  g.scale.setScalar(S);
   scene.add(g);
-  addBoxCollider(p.x, p.z, 15.2, 10.2);
-  GROUND_EXTRAS.push((x, z) => (Math.abs(x - p.x) < 19 && Math.abs(z - (p.z + 2)) < 14) ? y0 + PL : null);
+  const wc = (lx, lz, hw, hd) => addBoxCollider(p.x + lx * S, p.z + lz * S, hw * S, hd * S);
+  wc(0, -10 + WT / 2, 15, WT / 2);
+  for (const sx of [-1, 1]) { wc(sx * (15 - WT / 2), 0, WT / 2, 10); wc(sx * 8.65, 10 - WT / 2, 6.35, WT / 2); }
+  GROUND_EXTRAS.push((x, z) => (Math.abs(x - p.x) < 19 * S && Math.abs(z - (p.z + 2 * S)) < 14 * S) ? y0 + PL * S : null);
+  const hw = (15 - WT) * S, hd = (10 - WT) * S, fl = (PL + 0.05) * S, ce = (PL + 9.7) * S;
+  registerRoom(frameAt(p.x, y0, p.z, 0), 0, 0, hw, hd, fl, ce, 'Nilambur Teak Museum', 'museum', { noFloor: true });
+  furnishMuseum(p, y0, hw, hd, fl, ce);
 }
 
 // ---------- Landmark: Nilambur Kovilakam Palace ----------
+// Same approach as the museum: design units scaled by PALACE_S to a real two-storey Kerala palace
+// (~12.5 m to the ridge, a 5 m-high durbar hall, 3.5 m entrance) instead of a 20 m block.
+const PALACE_S = 0.62;
 function buildNilamburPalace() {
   const g = new THREE.Group();
   const p = LANDMARKS.palace.pos;
   const y0 = LM_H.palace;
   g.position.set(p.x, y0, p.z);
-  const PL = 0.9;
+  const PL = 0.9, S = PALACE_S;
 
   // Stone plinth and steps
   g.add(mk(texBox(36, PL, 30, 3), M.stone, 0, PL / 2, 2));
   g.add(mk(texBox(10, 0.6, 1.3, 3), M.stone, 0, 0.3, 17.6, false, true));
   g.add(mk(texBox(10, 0.3, 1.3, 3), M.stone, 0, 0.15, 18.7, false, true));
 
-  // Main hall
-  g.add(mk(texBox(26, 8, 18, 4), M.plaster, 0, PL + 4, 0));
+  // Main (durbar) hall: hollow, entered through the front door
+  const WT = 0.4;
+  g.add(mk(texBox(26, 8, WT, 4), M.plaster, 0, PL + 4, -9 + WT / 2));
+  for (const sx of [-1, 1]) {
+    g.add(mk(texBox(WT, 8, 18, 4), M.plaster, sx * (13 - WT / 2), PL + 4, 0));
+    g.add(mk(texBox(11.2, 8, WT, 4), M.plaster, sx * 7.4, PL + 4, 9 - WT / 2));
+  }
+  g.add(mk(texBox(3.6, 2.4, WT, 4), M.plaster, 0, PL + 6.8, 9 - WT / 2));
+  g.add(mk(texBox(25.2, 0.3, 17.2, 3), M.woodDark, 0, PL + 7.85, 0, false, true));   // carved teak ceiling
+  g.add(mk(texBox(25.2, 0.04, 17.2, 2), M.stone, 0, PL + 0.72, 0, false, true));
   // Timber band and plinth moulding
   g.add(mk(texBox(26.6, 0.5, 18.6, 3), M.woodDark, 0, PL + 8.0, 0));
   g.add(mk(texBox(26.5, 0.7, 18.5, 3), M.stone, 0, PL + 0.35, 0));
@@ -1094,8 +1122,8 @@ function buildNilamburPalace() {
   // Low veranda parapet with lattice gaps
   for (const sx of [-1, 1]) g.add(mk(texBox(8, 0.9, 0.4, 3), M.plaster, sx * 10, PL + 0.5, 12.2));
 
-  // Entrance door, windows with timber shutters
-  g.add(mk(new THREE.BoxGeometry(3.6, 5.6, 0.3), M.woodDark, 0, PL + 2.8, 9.1));
+  // Entrance doors (standing open), windows with timber shutters
+  for (const sx of [-1, 1]) { const dl = mk(new THREE.BoxGeometry(1.8, 5.6, 0.2), M.woodDark, sx * 2.3, PL + 2.8, 8.0); dl.rotation.y = sx * 1.3; g.add(dl); }
   g.add(mk(new THREE.BoxGeometry(4.6, 0.4, 0.5), M.wood, 0, PL + 5.8, 9.2));
   for (const x of [-10, -6, 6, 10]) {
     g.add(mk(new THREE.BoxGeometry(2, 3, 0.2), M.glass, x, PL + 4.5, 9.05));
@@ -1125,9 +1153,15 @@ function buildNilamburPalace() {
   sb.rotation.y = 0.2;
   g.add(sb);
 
+  g.scale.setScalar(S);
   scene.add(g);
-  addBoxCollider(p.x, p.z, 13.2, 9.2);
-  GROUND_EXTRAS.push((x, z) => (Math.abs(x - p.x) < 18 && Math.abs(z - (p.z + 2)) < 15) ? y0 + PL : null);
+  const wc = (lx, lz, hw, hd) => addBoxCollider(p.x + lx * S, p.z + lz * S, hw * S, hd * S);
+  wc(0, -9 + WT / 2, 13, WT / 2);
+  for (const sx of [-1, 1]) { wc(sx * (13 - WT / 2), 0, WT / 2, 9); wc(sx * 7.4, 9 - WT / 2, 5.6, WT / 2); }
+  GROUND_EXTRAS.push((x, z) => (Math.abs(x - p.x) < 18 * S && Math.abs(z - (p.z + 2 * S)) < 15 * S) ? y0 + PL * S : null);
+  const hw = (13 - WT) * S, hd = (9 - WT) * S, fl = (PL + 0.74) * S, ce = (PL + 7.7) * S;
+  registerRoom(frameAt(p.x, y0, p.z, 0), 0, 0, hw, hd, fl, ce, 'Nilambur Kovilakam', 'palace', { floorHW: 13 * S, floorHD: 9 * S });
+  furnishPalace(p, y0, hw, hd, fl, ce);
 }
 
 // ---------- Landmark: Adyanpara Waterfalls ----------
@@ -1436,7 +1470,15 @@ function buildRailwayTrack() {
   // Station building behind the platform
   const bx = 11.8;
   g.add(mk(texBox(8.5, 0.5, 20, 3), M.stone, bx, 0.25, SZ));
-  g.add(mk(texBox(8, 4.6, 19, 4), M.plaster, bx, 0.5 + 2.3, SZ));
+  // Hollow booking office / waiting hall, its door on the platform side (x = bx - 4)
+  const SW = 0.3;
+  g.add(mk(texBox(SW, 4.6, 19, 4), M.plaster, bx + 4 - SW / 2, 2.8, SZ));
+  for (const sz of [-1, 1]) {
+    g.add(mk(texBox(8, 4.6, SW, 4), M.plaster, bx, 2.8, SZ + sz * (9.5 - SW / 2)));
+    g.add(mk(texBox(SW, 4.6, 8.5, 4), M.plaster, bx - 4 + SW / 2, 2.8, SZ + sz * 5.25));
+  }
+  g.add(mk(texBox(SW, 1.4, 2.0, 4), M.plaster, bx - 4 + SW / 2, 4.4, SZ));
+  g.add(mk(texBox(7.6, 0.1, 18.6, 3), M.plaster, bx, 5.05, SZ, false, true));
   g.add(mk(texBox(8.2, 0.4, 19.2, 3), M.woodDark, bx, 0.5 + 4.65, SZ));
   const sr = makeGableRoof(19, 8, 3.2, 2.2, 1);
   const stRoof = mk(sr.roof, M.roof, bx, 0.5 + 4.85, SZ);
@@ -1448,7 +1490,7 @@ function buildRailwayTrack() {
     g.add(mk(new THREE.BoxGeometry(0.2, 2.2, 1.5), M.glass, bx - 4.05, 2.4, z));
     g.add(mk(new THREE.BoxGeometry(0.3, 0.2, 1.9), M.woodDark, bx - 4.05, 3.6, z));
   }
-  g.add(mk(new THREE.BoxGeometry(0.3, 3.2, 2), M.woodDark, bx - 4.05, 2.1, SZ));
+  for (const sz of [-1, 1]) { const dl = mk(new THREE.BoxGeometry(0.08, 3.2, 1.0), M.woodDark, bx - 3.45, 2.1, SZ + sz * 0.55); dl.rotation.y = sz * 1.2; g.add(dl); }
   // Platform canopy on steel posts
   for (let z = SZ - 15; z <= SZ + 15; z += 5) {
     g.add(mk(new THREE.CylinderGeometry(0.1, 0.1, 4.2, 8), M.steelDark, 6.6, PH + 2.0, z));
@@ -1510,7 +1552,11 @@ function buildRailwayTrack() {
   ANIM.train = train;
 
   scene.add(g);
-  addBoxCollider(RAIL_X + bx, SZ, 4.2, 9.7);
+  addBoxCollider(RAIL_X + bx + 4 - SW / 2, SZ, SW / 2, 9.5);
+  for (const sz of [-1, 1]) { addBoxCollider(RAIL_X + bx, SZ + sz * (9.5 - SW / 2), 4, SW / 2); addBoxCollider(RAIL_X + bx - 4 + SW / 2, SZ + sz * 5.25, SW / 2, 4.25); }
+  const SF = frameAt(RAIL_X + bx, RAIL_H, SZ, -Math.PI / 2);
+  registerRoom(SF, 0, 0, 9.5 - SW, 4 - SW, 0.5, 5.0, 'Nilambur Road Station', 'station', { floorHW: 9.5, floorHD: 4, stepD: 0.9, stepY: 0.5 });
+  furnishStation(RAIL_X + bx, RAIL_H, SZ, 9.5 - SW, 4 - SW, 0.5, 5.0);
   GROUND_EXTRAS.push((x, z) => (Math.abs(x - (RAIL_X + 4.7)) < 2.4 && Math.abs(z - SZ) < 19) ? RAIL_H + PH : null);
 }
 

@@ -295,7 +295,7 @@
     g.fillText((friend ? '★ ' : '') + text, 128, 33);
     const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding;
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
-    sp.scale.set(2.6, 0.65, 1); sp.position.y = 2.6; sp.renderOrder = 10;
+    sp.scale.set(2.6, 0.65, 1); sp.position.y = 2.15; sp.renderOrder = 10;
     return sp;
   }
 
@@ -459,6 +459,7 @@
     if (!draft) draft = Object.assign({}, (window.playerAppearance || (typeof loadAppearance === 'function' && loadAppearance()) || (typeof defaultAppearance === 'function' ? defaultAppearance() : {})));
     return draft;
   }
+  NW.setAppearance = function (partial) { setAppearance(partial); };   // for in-world features (salon, trial room)
   function setAppearance(partial) {
     const d = Object.assign(ensureDraft(), partial);
     draft = (typeof applyPlayerAppearance === 'function') ? applyPlayerAppearance(d) : d;   // live preview + persists

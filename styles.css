@@ -742,3 +742,12 @@ body, html {
 .option-btn:hover { background: rgba(0, 230, 118, 0.12); }
 .option-btn.active { background: var(--primary-emerald); color: #000; font-weight: 700; border-color: var(--primary-emerald); }
 .char-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-main); cursor: pointer; }
+
+/* "Press E" prompt for building features (interiors.js) */
+#spot-prompt {
+  position: fixed; left: 50%; bottom: 128px; transform: translate(-50%, 12px);
+  padding: 8px 16px; border-radius: 12px; font-size: 14px; font-weight: 600; color: var(--text-main);
+  opacity: 0; pointer-events: none; transition: opacity 0.18s ease, transform 0.18s ease; z-index: 30; white-space: nowrap;
+}
+#spot-prompt.show { opacity: 1; transform: translate(-50%, 0); }
+#spot-prompt .key-badge { margin-right: 6px; }

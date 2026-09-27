@@ -433,6 +433,8 @@ function saveAppearance(a) {
 // (colour) and mesh visibility (style/outfit/shoe choice) vary per rig, so this stays cheap even with
 // several explorers on screen. Never dispose() these - they are shared, not per-avatar.
 let RIG_GEO = null;
+const RIG_SCALE = 0.79;              // see buildHumanRig - makes avatars real adult height
+const RIG_HIP_Y = 0.98 * RIG_SCALE;  // hip height above the feet at that scale
 function getRigGeo() {
   if (RIG_GEO) return RIG_GEO;
   const Cap = (r, l, cs, rs) => new THREE.CapsuleGeometry(r, l, cs, rs);
@@ -620,7 +622,10 @@ function buildHumanRig(appearance) {
   }
   const legL = makeLeg(-1), legR = makeLeg(1);
 
-  body.scale.setScalar(1.05);
+  // Real adult height: head top ~1.71 m, hair ~1.74 m. (This used to be 1.05, which made every avatar
+  // ~2.3 m tall - 35% bigger than the metre-scale vehicles, doors and buildings around it. Hips sit at
+  // 0.98 * RIG_SCALE above the feet; the bike/kayak seat offsets below are derived from that.)
+  body.scale.setScalar(RIG_SCALE);
 
   Object.assign(P, {
     hair: hair, flower: flower, capHat: capHat, collar: collar, tunicSkirt: tunicSkirt,
@@ -1096,6 +1101,7 @@ function animate() {
   windUniform.value = clock.t;
 
   updatePlayerMovement(dt);
+  if (typeof updateSpotPrompt === 'function') updateSpotPrompt();
   updateEngineAudio();
   updateCamera(dt);
   updateEnvironment(dt, false);
@@ -1165,6 +1171,8 @@ function updatePlayerMovement(dt) {
   const parent = playerMesh.parent;
   const sprint = keyState['ShiftLeft'] || keyState['ShiftRight'];
   let speed = sprint ? 17 : 8;
+  // Indoors, slow to a real walking pace - at outdoor game speed you'd cross a 10 m shop in a second
+  if (typeof roomAt === 'function' && roomAt(parent.position.x, parent.position.y, parent.position.z)) speed = sprint ? 4.5 : 2.6;
 
   let inF = 0, inR = 0;
   if (keyState['KeyW'] || keyState['ArrowUp']) inF += 1;
@@ -1249,7 +1257,7 @@ function updateCamera(dt) {
     camRig.pitch += (0.22 - camRig.pitch) * Math.min(1, dt * 4);
   } else if (state.isCameraOrbit && !camRig.dragging && camRig.idleTime > 3) camRig.yaw += dt * 0.07;
 
-  const tx = p.x, ty = p.y + 1.55, tz = p.z;
+  const tx = p.x, ty = p.y + 1.45, tz = p.z;   // ~eye level of a 1.72 m person
   const cp = Math.cos(camRig.pitch), sp = Math.sin(camRig.pitch);
   // Pull the camera in when trunks or walls are in the way
   let dist = camRig.dist;
@@ -1264,6 +1272,13 @@ function updateCamera(dt) {
   let cz = tz + Math.cos(camRig.yaw) * cp * dist;
   const minY = Math.max(groundHeight(cx, cz), WATER_Y) + 0.9;
   if (cy < minY) cy = minY;
+  // Indoors: keep the camera inside the room's walls and under its ceiling (interiors.js)
+  const room = typeof roomAt === 'function' ? roomAt(tx, p.y, tz) : null;
+  if (room) {
+    cx = clamp(cx, room.room[0] + 0.3, room.room[1] - 0.3);
+    cz = clamp(cz, room.room[2] + 0.3, room.room[3] - 0.3);
+    cy = clamp(cy, room.floorY + 0.8, room.ceilY - 0.25);
+  }
   camera.position.set(cx, cy, cz);
   camera.lookAt(tx, ty + 0.2, tz);
 }
@@ -1837,7 +1852,11 @@ const ENTER_RANGE = 3.5;
 // Open vehicles (no cabin hiding the driver) keep the avatar visible, seated in a pose fitting the
 // vehicle, instead of hiding it the way an enclosed car/bus/auto does.
 const RIDER_VISIBLE_TYPES = { bike: 1, kayak: 1 };
-const RIDER_SEAT_Y = { bike: 0.16 };   // seat height above ground; other land types keep the default 1.0
+// Where the avatar's feet-origin goes so its hips land on the seat: the bike seat top is ~1.19 m up
+// (vehicle group at ground + ROAD_Y), the kayak's seat well ~WATER_Y + 0.55. Derived from RIG_HIP_Y so
+// they stay right if the rig's scale changes again.
+const RIDER_SEAT_Y = { bike: 1.19 - RIG_HIP_Y };   // other land types keep the default 1.0 (avatar hidden)
+const KAYAK_SEAT_Y = WATER_Y + 0.55 - RIG_HIP_Y;
 
 // Pose the avatar's rig for riding a bike or a kayak (called once on entry) - animatePlayerRig, the
 // walk-cycle animator, never runs while state.driving is set, so this pose holds steady on its own.
@@ -2052,9 +2071,9 @@ function updateVehicleDriving(dt) {
     v.g.position.set(v.x, WATER_Y + 0.16, v.z);
     v.g.rotation.y = v.yaw;
     const parent = playerMesh.parent;
-    parent.position.set(v.x, WATER_Y - 0.48, v.z);   // sit down inside the hull, not floating above it
+    parent.position.set(v.x, KAYAK_SEAT_Y, v.z);   // sit down inside the hull, not floating above it
     playerMesh.rotation.y = v.yaw;
-    state.playerPos.x = v.x; state.playerPos.y = WATER_Y - 0.48; state.playerPos.z = v.z;
+    state.playerPos.x = v.x; state.playerPos.y = KAYAK_SEAT_Y; state.playerPos.z = v.z;
     // Paddling animation while actually under way
     const r = playerRig;
     if (r && Math.abs(v.spd) > 0.25) {
@@ -2151,6 +2170,7 @@ function interactNearest() {
   if (state.ridingTrain) { tryExitTrain(); return; }
   if (tryBoardTrain()) return;
   if (tryEnterVehicle()) return;
+  if (typeof trySpot === 'function' && trySpot()) return;   // a building's own feature (interiors.js)
 
   let best = null, bd = 1e9;
   for (const key in LANDMARKS) {
